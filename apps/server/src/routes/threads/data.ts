@@ -1,4 +1,8 @@
 import { serveDaemonFileStream } from "../../services/hosts/daemon-file-stream.js";
+import {
+  createRawFileHeaders,
+  isHtmlMimeType,
+} from "../../services/hosts/raw-file-headers.js";
 import { extractThreadContextWindowUsage } from "@bb/thread-view";
 import { clearTimelineOrderingContextCache } from "../../services/threads/timeline-context-order.js";
 import path from "node:path";
@@ -138,12 +142,6 @@ interface RequireThreadStorageTargetArgs {
   threadId: string;
 }
 
-const RAW_FILE_NO_STORE_CACHE_CONTROL = "no-store";
-const RAW_FILE_HTML_CONTENT_TYPE = "text/html; charset=utf-8";
-const RAW_FILE_CONTENT_TYPE_OPTIONS = "nosniff";
-const HTML_PREVIEW_MAX_BYTES = 5 * 1024 * 1024;
-const GENERIC_HTML_PREVIEW_CSP = "sandbox allow-scripts";
-
 function parseThreadEventTypes(
   value: string | undefined,
 ): ThreadEventType[] | undefined {
@@ -241,35 +239,13 @@ function isHtmlPreviewPath(relativePath: string): boolean {
   return relativePath.toLowerCase().endsWith(".html");
 }
 
-function assertHtmlPreviewSize(relativePath: string, sizeBytes: number): void {
-  if (isHtmlPreviewPath(relativePath) && sizeBytes > HTML_PREVIEW_MAX_BYTES) {
-    throw new ApiError(
-      413,
-      "file_too_large",
-      "HTML preview exceeds the 5 MB limit",
-      false,
-    );
-  }
-}
-
 function createRawFilePreviewResponse(
   result: DaemonFileReadResult,
-  relativePath: string,
   ifNoneMatch: string | undefined,
 ): Response {
-  assertHtmlPreviewSize(relativePath, result.sizeBytes);
-  const headers = new Headers({
-    "x-content-type-options": RAW_FILE_CONTENT_TYPE_OPTIONS,
-  });
-  const isHtml = isHtmlPreviewPath(relativePath);
-  if (isHtml) {
-    headers.set("cache-control", RAW_FILE_NO_STORE_CACHE_CONTROL);
-    headers.set("content-security-policy", GENERIC_HTML_PREVIEW_CSP);
-    headers.set("content-type", RAW_FILE_HTML_CONTENT_TYPE);
-  }
   return createDaemonFileContentResponse(result, {
-    headers,
-    ifNoneMatch: isHtml ? undefined : ifNoneMatch,
+    headers: createRawFileHeaders(result),
+    ifNoneMatch: isHtmlMimeType(result.mimeType) ? undefined : ifNoneMatch,
   });
 }
 
@@ -289,18 +265,7 @@ async function serveThreadStorageRawFile(
       rootPath: target.storagePath,
     },
     request,
-    (metadata) => {
-      assertHtmlPreviewSize(filePath.relativePath, metadata.sizeBytes);
-      const headers = new Headers({
-        "x-content-type-options": RAW_FILE_CONTENT_TYPE_OPTIONS,
-      });
-      if (isHtmlPreviewPath(filePath.relativePath)) {
-        headers.set("cache-control", RAW_FILE_NO_STORE_CACHE_CONTROL);
-        headers.set("content-security-policy", GENERIC_HTML_PREVIEW_CSP);
-        headers.set("content-type", RAW_FILE_HTML_CONTENT_TYPE);
-      }
-      return headers;
-    },
+    createRawFileHeaders,
   );
 }
 
@@ -325,8 +290,7 @@ async function serveThreadWorktreeRawFile(
       path: path.join(environment.path, filePath.relativePath),
       rootPath: environment.path,
     },
-    (result) =>
-      createRawFilePreviewResponse(result, filePath.relativePath, ifNoneMatch),
+    (result) => createRawFilePreviewResponse(result, ifNoneMatch),
   );
 }
 

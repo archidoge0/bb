@@ -1,7 +1,6 @@
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import type { Hono } from "hono";
-import mimeTypes from "mime-types";
 import {
   publicApiRoutes,
   typedRoutes,
@@ -17,12 +16,14 @@ import {
   callHostRetryableOnlineRpc,
 } from "../services/hosts/online-rpc.js";
 import {
-  createDaemonFileContentResponse,
-  type DaemonFileReadResult,
   requireDaemonFileContentResult,
   remapDaemonFileRouteError,
-  serveDaemonFileContent,
 } from "../services/hosts/daemon-file-response.js";
+import { serveDaemonFileStream } from "../services/hosts/daemon-file-stream.js";
+import {
+  createRawFileHeaders,
+  hostPathRoot,
+} from "../services/hosts/raw-file-headers.js";
 import {
   assertUsableHostId,
   requirePrimaryHostId,
@@ -35,23 +36,12 @@ import {
 
 const HOST_FILE_LIST_LIMIT_DEFAULT = 1000;
 
-const HTML_PREVIEW_MAX_BYTES = 5 * 1024 * 1024;
-const HTML_PREVIEW_CONTENT_TYPE = "text/html; charset=utf-8";
-const HTML_PREVIEW_CSP = "sandbox allow-scripts";
-const NO_STORE_CACHE_CONTROL = "no-store";
-const NOSNIFF_CONTENT_TYPE_OPTIONS = "nosniff";
-const HTML_MIME_TYPE = "text/html";
 const FILE_PREVIEW_TTL_MS = 10 * 60 * 1000;
 
 interface FilePreviewLease {
   hostId: string;
   rootPath: string;
   expiresAtMs: number;
-}
-
-function normalizeMimeType(value: string | null | undefined): string | null {
-  const normalizedValue = value?.split(";")[0]?.trim().toLowerCase();
-  return normalizedValue && normalizedValue.length > 0 ? normalizedValue : null;
 }
 
 function isAbsoluteHostPath(value: string): boolean {
@@ -70,21 +60,8 @@ function joinHostPath(rootPath: string, segments: string[]): string {
     : path.posix.join(rootPath, ...segments);
 }
 
-function isHtmlMimeType(value: string | null | undefined): boolean {
-  return normalizeMimeType(value) === HTML_MIME_TYPE;
-}
-
 function createRawFilesystemPathInvalidError(): ApiError {
   return new ApiError(400, "invalid_path", "Invalid file path", false);
-}
-
-function createRawFilesystemPathUnsupportedError(): ApiError {
-  return new ApiError(
-    415,
-    "unsupported_media_type",
-    "HTML preview only supports text/html files",
-    false,
-  );
 }
 
 function parseRawFilesystemPath(rawPath: string): string {
@@ -94,58 +71,23 @@ function parseRawFilesystemPath(rawPath: string): string {
   return path.resolve(rawPath);
 }
 
-function assertHtmlPreviewPath(filePath: string): void {
-  if (!isHtmlMimeType(mimeTypes.lookup(filePath) || null)) {
-    throw createRawFilesystemPathUnsupportedError();
-  }
-}
-
-function assertRawFilesystemHtmlPreviewResult(
-  result: DaemonFileReadResult,
-): void {
-  if (!isHtmlMimeType(result.mimeType) || result.contentEncoding !== "utf8") {
-    throw createRawFilesystemPathUnsupportedError();
-  }
-
-  if (result.sizeBytes > HTML_PREVIEW_MAX_BYTES) {
-    throw new ApiError(
-      413,
-      "file_too_large",
-      "HTML preview exceeds the 5 MB limit",
-      false,
-    );
-  }
-}
-
-function createRawFilesystemHtmlPreviewResponse(
-  result: DaemonFileReadResult,
-): Response {
-  assertRawFilesystemHtmlPreviewResult(result);
-  return createDaemonFileContentResponse(result, {
-    headers: {
-      "cache-control": NO_STORE_CACHE_CONTROL,
-      "content-security-policy": HTML_PREVIEW_CSP,
-      "content-type": HTML_PREVIEW_CONTENT_TYPE,
-      "x-content-type-options": NOSNIFF_CONTENT_TYPE_OPTIONS,
-    },
-  });
-}
-
-async function serveRawFilesystemHtmlFile(
+async function serveRawFilesystemFile(
   deps: LoggedWorkSessionDeps,
   threadId: string,
   rawPath: string,
+  request: Request,
 ): Promise<Response> {
   const filePath = parseRawFilesystemPath(rawPath);
-  assertHtmlPreviewPath(filePath);
   const { environment } = requirePublicThreadEnvironment(deps.db, threadId);
-  return serveDaemonFileContent(
+  return serveDaemonFileStream(
     deps,
     {
       hostId: environment.hostId,
       path: filePath,
+      rootPath: hostPathRoot(filePath),
     },
-    createRawFilesystemHtmlPreviewResponse,
+    request,
+    createRawFileHeaders,
   );
 }
 
@@ -156,7 +98,12 @@ export function registerFileRoutes(app: Hono, deps: AppDeps): void {
   const routes = publicApiRoutes.threads;
 
   get(routes.rawFile, async (context, query) =>
-    serveRawFilesystemHtmlFile(deps, context.req.param("id"), query.path),
+    serveRawFilesystemFile(
+      deps,
+      context.req.param("id"),
+      query.path,
+      context.req.raw,
+    ),
   );
 
   const fileRoutes = publicApiRoutes.files;
@@ -402,31 +349,15 @@ export function registerFileRoutes(app: Hono, deps: AppDeps): void {
     ) {
       throw new ApiError(400, "invalid_path", "Invalid preview path", false);
     }
-    const isHtmlPath = isHtmlMimeType(mimeTypes.lookup(rawPath) || null);
-    return serveDaemonFileContent(
+    return serveDaemonFileStream(
       deps,
       {
         hostId: lease.hostId,
-        ...(!isHtmlPath
-          ? { ifNoneMatch: context.req.header("if-none-match") }
-          : {}),
         path: joinHostPath(lease.rootPath, segments),
         rootPath: lease.rootPath,
       },
-      (result) => {
-        const headers = new Headers({ "x-content-type-options": "nosniff" });
-        const isHtml = isHtmlMimeType(result.mimeType);
-        if (isHtml) {
-          assertRawFilesystemHtmlPreviewResult(result);
-          headers.set("cache-control", "no-store");
-          headers.set("content-security-policy", HTML_PREVIEW_CSP);
-          headers.set("content-type", HTML_PREVIEW_CONTENT_TYPE);
-        }
-        return createDaemonFileContentResponse(result, {
-          headers,
-          ifNoneMatch: isHtml ? undefined : context.req.header("if-none-match"),
-        });
-      },
+      context.req.raw,
+      createRawFileHeaders,
     );
   });
 }

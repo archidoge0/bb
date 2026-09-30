@@ -39,13 +39,12 @@ import {
   TooltipTrigger,
 } from "@bb/shared-ui/tooltip";
 import { TruncateStart } from "@/components/ui/truncate-start.js";
-import { appToast } from "@/components/ui/app-toast";
 import { copyToClipboardWithToast } from "@/lib/clipboard";
-import { downloadBlob } from "@/lib/download-blob";
 import { formatByteSize } from "@/lib/format-byte-size";
 import { openUrlInExternalBrowser } from "@/lib/url-open-routing";
 import type {
   FilePreviewLineRange,
+  UnsupportedFilePreviewReason,
   WorkspaceFilePreviewStatusLabel,
 } from "@bb/client-core";
 import {
@@ -66,7 +65,9 @@ export interface FilePreviewFile {
 export interface UnsupportedFilePreviewFile {
   mimeType: string;
   name: string;
+  reason: UnsupportedFilePreviewReason;
   sizeBytes: number;
+  url: string;
 }
 
 type IframePreviewSandbox = "allow-scripts";
@@ -103,7 +104,6 @@ interface FilePreviewProps {
   state: FilePreviewState;
   path: string;
   copyPath?: string | null;
-  fetchFileBlob?: () => Promise<Blob>;
   headerMode?: FilePreviewHeaderMode;
   onSelectionAddToChat?: (text: string) => void;
   onOpenInEditor?: (path: string) => void;
@@ -114,7 +114,6 @@ interface FilePreviewProps {
 }
 
 interface FilePreviewBodyProps {
-  fetchFileBlob?: () => Promise<Blob>;
   iframePreview: ReactNode;
   state: FilePreviewState;
   path: string;
@@ -183,7 +182,6 @@ interface FilePreviewVideoProps {
 }
 
 interface UnsupportedFilePreviewProps {
-  fetchFileBlob?: () => Promise<Blob>;
   file: UnsupportedFilePreviewFile;
 }
 
@@ -455,7 +453,6 @@ export function FilePreview({
   state,
   path,
   copyPath = null,
-  fetchFileBlob,
   headerMode = "file",
   onSelectionAddToChat,
   onOpenInEditor,
@@ -581,7 +578,6 @@ export function FilePreview({
         />
       ) : null}
       <FilePreviewBody
-        fetchFileBlob={fetchFileBlob}
         iframePreview={iframePreview}
         state={state}
         path={path}
@@ -595,7 +591,6 @@ export function FilePreview({
 }
 
 function FilePreviewBody({
-  fetchFileBlob,
   iframePreview,
   state,
   path,
@@ -622,9 +617,7 @@ function FilePreviewBody({
     );
   }
   if (state.kind === "unsupported") {
-    return (
-      <UnsupportedFilePreview fetchFileBlob={fetchFileBlob} file={state.file} />
-    );
+    return <UnsupportedFilePreview file={state.file} />;
   }
   if (state.kind === "image") {
     return <FilePreviewImage url={state.url} alt={path} />;
@@ -1321,23 +1314,7 @@ function IframeFilePreview({
   );
 }
 
-function UnsupportedFilePreview({
-  fetchFileBlob,
-  file,
-}: UnsupportedFilePreviewProps) {
-  const [isDownloading, setIsDownloading] = useState(false);
-  const download = async (fetchBlob: () => Promise<Blob>) => {
-    setIsDownloading(true);
-    try {
-      downloadBlob(await fetchBlob(), file.name);
-    } catch (error) {
-      appToast.error(`Couldn't download ${file.name}`, {
-        description: error instanceof Error ? error.message : undefined,
-      });
-    } finally {
-      setIsDownloading(false);
-    }
-  };
+function UnsupportedFilePreview({ file }: UnsupportedFilePreviewProps) {
   return (
     <div className="flex flex-col items-center gap-4 px-6 py-12 text-center">
       <div className="flex size-12 items-center justify-center rounded-lg bg-surface-raised text-muted-foreground">
@@ -1352,28 +1329,16 @@ function UnsupportedFilePreview({
         </p>
       </div>
       <p className="text-sm text-muted-foreground">
-        This file type can't be previewed.
+        {file.reason === "too-large"
+          ? "This file is too large to preview."
+          : "This file type can't be previewed."}
       </p>
-      {fetchFileBlob === undefined ? null : (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={isDownloading}
-          onClick={() => void download(fetchFileBlob)}
-        >
-          {isDownloading ? (
-            <Icon
-              name="Spinner"
-              className="animate-spin motion-reduce:animate-none"
-              aria-hidden
-            />
-          ) : (
-            <Icon name="Download" aria-hidden />
-          )}
-          {isDownloading ? "Downloading…" : "Download"}
-        </Button>
-      )}
+      <Button asChild variant="outline" size="sm">
+        <a href={file.url} download={file.name}>
+          <Icon name="Download" aria-hidden />
+          Download
+        </a>
+      </Button>
     </div>
   );
 }

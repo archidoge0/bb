@@ -4849,63 +4849,85 @@ describe("public thread data routes", () => {
     });
   });
 
-  it("serves absolute-path HTML files via files/raw with preview headers", async () => {
+  it("streams absolute-path files via files/raw, sandboxing HTML and honoring ranges", async () => {
     await withTestHarness(async (harness) => {
-      const { host } = seedHostSession(harness.deps);
-      const { project } = seedProjectWithSource(harness.deps, {
+      const { host, session, thread } = seedThreadFixture(harness);
+      const files = new Map([
+        [
+          "/tmp/anywhere/report.html",
+          {
+            bytes: Buffer.from("<!doctype html><h1>Raw preview</h1>"),
+            mimeType: "text/html",
+          },
+        ],
+        [
+          "/tmp/anywhere/archive.zip",
+          {
+            bytes: Buffer.from([0x50, 0x4b, 0x03, 0x04, 0, 1, 2, 3]),
+            mimeType: "application/zip",
+          },
+        ],
+      ]);
+      const rootPaths: string[] = [];
+      registerHostRpcResponder(harness, {
         hostId: host.id,
-        path: "/tmp/project-source",
+        sessionId: session.id,
+        handle: ({ command }) => {
+          if (command.type !== "host.read_file_chunk")
+            throw new Error("Unexpected command");
+          rootPaths.push(command.rootPath);
+          const file = files.get(command.path);
+          if (!file) throw new Error(`Unexpected path ${command.path}`);
+          return {
+            ok: true,
+            result: {
+              path: command.path,
+              content: file.bytes
+                .subarray(command.offset, command.offset + command.length)
+                .toString("base64"),
+              offset: command.offset,
+              mimeType: file.mimeType,
+              modifiedAtMs: 1234,
+              sizeBytes: file.bytes.length,
+              revision: "0".repeat(64),
+            },
+          };
+        },
       });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-        path: "/tmp/project-source",
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-      });
-      const html = "<!doctype html><h1>Raw preview</h1>";
 
-      const filePromise = harness.app.request(
+      const htmlResponse = await harness.app.request(
         `/api/v1/threads/${thread.id}/files/raw?path=${encodeURIComponent("/tmp/anywhere/report.html")}`,
       );
-      const fileCommand = await waitForQueuedCommand(
-        harness,
-        ({ command }) =>
-          command.type === "host.read_file" &&
-          command.path === "/tmp/anywhere/report.html",
-      );
-      expect(fileCommand.command).toMatchObject({
-        type: "host.read_file",
-        path: "/tmp/anywhere/report.html",
-      });
-      await reportQueuedCommandSuccess(harness, fileCommand, {
-        path: "/tmp/anywhere/report.html",
-        content: html,
-        contentEncoding: "utf8",
-        mimeType: "text/html",
-        sizeBytes: Buffer.byteLength(html),
-        sha256: "0".repeat(64),
-      });
-
-      const fileResponse = await filePromise;
-      expect(fileResponse.status).toBe(200);
-      expect(fileResponse.headers.get("content-type")).toBe(
+      expect(htmlResponse.status).toBe(200);
+      expect(htmlResponse.headers.get("content-type")).toBe(
         "text/html; charset=utf-8",
       );
-      expect(fileResponse.headers.get("content-security-policy")).toBe(
+      expect(htmlResponse.headers.get("content-security-policy")).toBe(
         "sandbox allow-scripts",
       );
-      expect(fileResponse.headers.get("cache-control")).toBe("no-store");
-      expect(fileResponse.headers.get("x-content-type-options")).toBe(
+      expect(htmlResponse.headers.get("cache-control")).toBe("no-store");
+      expect(htmlResponse.headers.get("x-content-type-options")).toBe(
         "nosniff",
       );
-      expect(await fileResponse.text()).toBe(html);
+      expect(await htmlResponse.text()).toBe(
+        "<!doctype html><h1>Raw preview</h1>",
+      );
+
+      const zipResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/files/raw?path=${encodeURIComponent("/tmp/anywhere/archive.zip")}`,
+        { headers: { Range: "bytes=0-3" } },
+      );
+      expect(zipResponse.status).toBe(206);
+      expect(zipResponse.headers.get("content-type")).toBe("application/zip");
+      expect(zipResponse.headers.get("content-range")).toBe("bytes 0-3/8");
+      expect(Buffer.from(await zipResponse.arrayBuffer())).toEqual(
+        Buffer.from([0x50, 0x4b, 0x03, 0x04]),
+      );
+      expect(new Set(rootPaths)).toEqual(new Set(["/"]));
     });
   });
 
-  it("rejects relative and non-HTML files/raw paths without contacting the host", async () => {
+  it("rejects relative and missing files/raw paths without contacting the host", async () => {
     await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
@@ -4928,14 +4950,6 @@ describe("public thread data routes", () => {
       expect(relativeResponse.status).toBe(400);
       await expect(readJson(relativeResponse)).resolves.toMatchObject({
         code: "invalid_path",
-      });
-
-      const nonHtmlResponse = await harness.app.request(
-        `/api/v1/threads/${thread.id}/files/raw?path=${encodeURIComponent("/tmp/anywhere/data.json")}`,
-      );
-      expect(nonHtmlResponse.status).toBe(415);
-      await expect(readJson(nonHtmlResponse)).resolves.toMatchObject({
-        code: "unsupported_media_type",
       });
 
       const missingPathResponse = await harness.app.request(

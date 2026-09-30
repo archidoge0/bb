@@ -74,6 +74,8 @@ import {
   serveDaemonFileContent,
   requestMatchesEntityTag,
 } from "../services/hosts/daemon-file-response.js";
+import { serveDaemonFileStream } from "../services/hosts/daemon-file-stream.js";
+import { createRawFileHeaders } from "../services/hosts/raw-file-headers.js";
 import { parseBoundedPositiveOptionalInteger } from "../services/lib/validation.js";
 import {
   buildCommandListResponse,
@@ -697,6 +699,28 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
           headers: { "x-bb-content-encoding": result.contentEncoding },
           ifNoneMatch: context.req.header("if-none-match"),
         }),
+    );
+  });
+
+  get(routes.fileRaw, async (context, query) => {
+    const projectId = context.req.param("id");
+    requirePublicProject(deps.db, projectId);
+    const target = resolveProjectWorkspaceTarget(deps, {
+      projectId,
+      environmentId: query.environmentId,
+      hostId: query.hostId,
+    });
+    const filePath = parseSafeRelativeRoutePath(query.path);
+
+    return serveDaemonFileStream(
+      deps,
+      {
+        hostId: target.hostId,
+        path: path.join(target.path, filePath.relativePath),
+        rootPath: target.path,
+      },
+      context.req.raw,
+      createRawFileHeaders,
     );
   });
 

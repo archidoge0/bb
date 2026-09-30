@@ -41,16 +41,33 @@ unarchived descendants remain. The summary is a preview; concurrent changes
 can alter the eventual archive result. CLI and SDK archive calls remain
 non-interactive.
 
-## Thread Storage Media Responses
+## Raw File Responses
 
-`GET /api/v1/threads/:id/thread-storage/files/:filePath` supports a single
-HTTP byte range for media playback and seeking. Responses advertise
-`Accept-Ranges: bytes`; bounded, open-ended, and suffix ranges return `206`
-with `Content-Range` and the selected bytes. Unsatisfiable ranges return `416`
-with `Content-Range: bytes */<size>`. Malformed ranges, unsupported units, and
-multipart ranges fall back to the full `200` response. HEAD ignores Range.
+These routes stream a file's bytes through bounded daemon reads:
 
-`If-None-Match` revalidation takes precedence over Range. Storage responses use
+- `GET /api/v1/threads/:id/thread-storage/files/:filePath`
+- `GET /api/v1/threads/:id/files/raw?path=<absolute path>` (thread host files)
+- `GET /api/v1/environments/:id/diff/file/raw` (same query as `diff/file`)
+- `GET /api/v1/projects/:id/files/raw` (same query as `files/content`)
+- `GET /api/v1/file-previews/:id/:filePath` (host preview leases)
+
+Each supports a single HTTP byte range for media playback, seeking, and file
+preview sampling. Responses advertise `Accept-Ranges: bytes`; bounded,
+open-ended, and suffix ranges return `206` with `Content-Range` and the selected
+bytes. Unsatisfiable ranges return `416` with `Content-Range: bytes */<size>`.
+Malformed ranges, unsupported units, and multipart ranges fall back to the full
+`200` response. HEAD ignores Range. `diff/file/raw` reads git revisions (the
+`old` side, or committed targets) with one whole-file daemon read, so those
+responses ignore Range and keep the daemon's 25 MB non-image limit.
+
+File previews request the first 64 KiB. A complete sample becomes the preview
+directly. Otherwise the sample, its MIME type, and the `Content-Range` size
+classify the file: images and videos render from the raw URL, binaries show
+their size and a Download link, and text is fetched in full only when it is at
+most 25 MB. The Download link is the same raw URL with the anchor `download`
+attribute, so the browser streams it to disk without the 25 MB limit.
+
+`If-None-Match` revalidation takes precedence over Range. Streamed responses use
 weak metadata ETags (`W/"file-<revision>"`), not content SHA-256 hashes. This
 avoids reading an entire large file just to validate it. Because the validator
 is weak, any `If-Range` header falls back to a full `200` response, including a
@@ -62,7 +79,9 @@ then reads at most 1 MiB per RPC as the HTTP consumer pulls data. HEAD, `304`,
 and `416` responses read no contents. Cancelling or aborting stops subsequent
 reads; an already in-flight RPC can finish. Each RPC opens and closes its file
 handle, so no remote read session needs cleanup. Offsets and lengths are
-validated at the daemon boundary, and paths remain confined to thread storage.
+validated at the daemon boundary, and paths remain confined to the route's root:
+thread storage, the environment or project source, the preview lease root, or
+the filesystem root for thread host files.
 
 The daemon returns a revision based on device, inode, size, and nanosecond
 mtime/ctime. Every content read checks the expected revision before and after

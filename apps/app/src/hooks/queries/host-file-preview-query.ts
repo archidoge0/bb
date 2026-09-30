@@ -1,16 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
-import { encodeBase64Bytes } from "@/lib/base64-bytes";
-import {
-  createFileContentBlob,
-  decodeFileContentBytes,
-} from "@/lib/file-content-bytes";
+import { loadFilePreview } from "@/lib/api";
 import { sdk } from "@/lib/sdk";
-import {
-  buildFilePreview,
-  isHtmlFilePreviewPath,
-  normalizeFilePreviewMimeType,
-  type FilePreview,
-} from "@bb/client-core";
+import type { FilePreview } from "@bb/client-core";
 import type { QueryOptions } from "./query-helpers";
 import { hostFilePreviewQueryKey } from "./query-keys";
 import { HEAVY_PAYLOAD_QUERY_POLICY } from "./query-policies";
@@ -74,16 +65,6 @@ function getHostMediaPreviewType(name: string): HostMediaPreviewType | null {
   );
 }
 
-export async function fetchHostFileBlob({
-  hostId,
-  path,
-}: {
-  hostId: string;
-  path: string;
-}): Promise<Blob> {
-  return createFileContentBlob(await sdk.files.read({ hostId, path }));
-}
-
 export function useHostFilePreview(
   hostId: string | null,
   path: string | null,
@@ -100,50 +81,17 @@ export function useHostFilePreview(
         throw new Error("Host file preview target is incomplete");
       }
       const { name, rootPath } = splitAbsoluteHostFilePath(activePath);
-      const previewLease = await sdk.files
-        .createPreview({ hostId: activeHostId, rootPath, signal })
-        .catch(() => null);
-      signal.throwIfAborted();
-      const previewUrl =
-        previewLease === null
-          ? null
-          : `${previewLease.baseUrl}/${encodeURIComponent(name)}`;
-      const mediaPreviewType = getHostMediaPreviewType(name);
-      if (previewUrl !== null && mediaPreviewType !== null) {
-        return { ...mediaPreviewType, name, path: activePath, url: previewUrl };
-      }
-
-      const response = await sdk.files.read({
+      const previewLease = await sdk.files.createPreview({
         hostId: activeHostId,
-        path: activePath,
+        rootPath,
         signal,
       });
-      const contentBytes = decodeFileContentBytes(response);
-      const mimeType = normalizeFilePreviewMimeType(response.mimeType ?? null);
-      const preview = buildFilePreview({
-        contentBytes,
-        mimeType,
-        name,
-        path: activePath,
-        url: previewUrl ?? activePath,
-      });
-      if (
-        previewUrl !== null ||
-        (preview.kind !== "image" &&
-          preview.kind !== "video" &&
-          !isHtmlFilePreviewPath(activePath))
-      ) {
-        return preview;
+      const url = `${previewLease.baseUrl}/${encodeURIComponent(name)}`;
+      const mediaPreviewType = getHostMediaPreviewType(name);
+      if (mediaPreviewType !== null) {
+        return { ...mediaPreviewType, name, path: activePath, url };
       }
-
-      const base64Content =
-        response.contentEncoding === "base64"
-          ? response.content
-          : encodeBase64Bytes(contentBytes);
-      return {
-        ...preview,
-        url: `data:${mimeType};base64,${base64Content}`,
-      };
+      return loadFilePreview({ name, path: activePath, url }, signal);
     },
     enabled,
     staleTime: 30_000,

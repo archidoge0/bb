@@ -551,6 +551,14 @@ export const publicApiRoutes = {
       ),
       response: binaryResponse<Uint8Array>(),
     }),
+    fileRaw: defineRoute({
+      path: "/projects/:id/files/raw",
+      method: "get",
+      request: queryRequest<PathProjectId, ProjectFileContentQuery>(
+        projectFileContentQuerySchema,
+      ),
+      response: binaryResponse<Uint8Array>(),
+    }),
     paths: defineRoute({
       path: "/projects/:id/paths",
       method: "get",
@@ -1164,6 +1172,14 @@ export const publicApiRoutes = {
         environmentDiffFileQuerySchema,
       ),
       response: jsonResponse<EnvironmentDiffFileResponse>(),
+    }),
+    diffFileRaw: defineRoute({
+      path: "/environments/:id/diff/file/raw",
+      method: "get",
+      request: queryRequest<PathId, EnvironmentDiffFileQuery>(
+        environmentDiffFileQuerySchema,
+      ),
+      response: binaryResponse<Uint8Array>(),
     }),
     diffBranches: defineRoute({
       path: "/environments/:id/diff/branches",

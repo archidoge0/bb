@@ -30,14 +30,15 @@ export function buildProjectFileContentUrl(
   );
 }
 
-export function buildThreadStorageContentUrl(
-  threadId: string,
+export function buildProjectFileRawUrl(
+  projectId: string,
   path: string,
+  routing: { environmentId?: string; hostId?: string },
 ): string {
   return toRelativeUrl(
-    apiClient.threads[":id"]["thread-storage"].content.$url({
-      param: { id: threadId },
-      query: { path },
+    apiClient.projects[":id"].files.raw.$url({
+      param: { id: projectId },
+      query: { path, ...routing },
     }),
   );
 }
@@ -65,7 +66,7 @@ export function buildThreadHostFileContentUrl(
   );
 }
 
-export function buildRawFilesystemHtmlContentUrl(
+export function buildThreadRawFileUrl(
   threadId: string,
   path: string,
 ): string {
@@ -88,12 +89,12 @@ export function buildThreadWorktreeRawContentUrl(
   );
 }
 
-export function buildEnvironmentDiffFileContentUrl(
+export function buildEnvironmentDiffFileRawUrl(
   environmentId: string,
   query: EnvironmentDiffFileQuery,
 ): string {
   return toRelativeUrl(
-    apiClient.environments[":id"].diff.file.$url({
+    apiClient.environments[":id"].diff.file.raw.$url({
       param: { id: environmentId },
       query,
     }),

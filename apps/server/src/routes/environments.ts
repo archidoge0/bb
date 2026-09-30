@@ -45,9 +45,12 @@ import {
   callHostRetryableOnlineRpcForWork,
 } from "../services/hosts/online-rpc.js";
 import {
+  createDaemonFileContentResponse,
   remapDaemonFileRouteError,
   requireDaemonFileContentResult,
 } from "../services/hosts/daemon-file-response.js";
+import { serveDaemonFileStream } from "../services/hosts/daemon-file-stream.js";
+import { createRawFileHeaders } from "../services/hosts/raw-file-headers.js";
 import { generateCommitMessage } from "../services/ai/commit-message.js";
 import { archiveEnvironmentThreads } from "../services/threads/thread-archive.js";
 import {
@@ -245,6 +248,20 @@ async function runPullRequestAction(
       },
     }),
   );
+}
+
+function resolveDiffFileAbsolutePath(
+  environment: { path: string },
+  query: EnvironmentDiffFileQuery,
+): string {
+  const repoRelativePath = query.path.replace(/^\/+/u, "");
+  if (
+    repoRelativePath.length === 0 ||
+    repoRelativePath.split("/").includes("..")
+  ) {
+    throw new ApiError(400, "invalid_request", "Invalid path");
+  }
+  return path.join(environment.path, repoRelativePath);
 }
 
 function resolveDiffFileRef(
@@ -582,14 +599,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
       deps.db,
       context.req.param("id"),
     );
-    const repoRelativePath = query.path.replace(/^\/+/u, "");
-    if (
-      repoRelativePath.length === 0 ||
-      repoRelativePath.split("/").includes("..")
-    ) {
-      throw new ApiError(400, "invalid_request", "Invalid path");
-    }
-    const absolutePath = path.join(environment.path, repoRelativePath);
+    const absolutePath = resolveDiffFileAbsolutePath(environment, query);
     const ref = resolveDiffFileRef(query);
     const result = await callHostRetryableOnlineRpc(deps, {
       hostId: environment.hostId,
@@ -608,6 +618,41 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
       contentEncoding: contentResult.contentEncoding,
       ...(contentResult.mimeType ? { mimeType: contentResult.mimeType } : {}),
       sizeBytes: contentResult.sizeBytes,
+    });
+  });
+
+  get(routes.diffFileRaw, async (context, query) => {
+    const environment = requireReadyEnvironment(
+      deps.db,
+      context.req.param("id"),
+    );
+    const absolutePath = resolveDiffFileAbsolutePath(environment, query);
+    const ref = resolveDiffFileRef(query);
+    if (ref === undefined) {
+      return serveDaemonFileStream(
+        deps,
+        {
+          hostId: environment.hostId,
+          path: absolutePath,
+          rootPath: environment.path,
+        },
+        context.req.raw,
+        createRawFileHeaders,
+      );
+    }
+    const result = await callHostRetryableOnlineRpc(deps, {
+      hostId: environment.hostId,
+      timeoutMs: COMMAND_TIMEOUT_MS,
+      command: {
+        type: "host.read_file",
+        path: absolutePath,
+        rootPath: environment.path,
+        ref,
+      },
+    }).catch(remapDaemonFileRouteError);
+    const contentResult = requireDaemonFileContentResult(result);
+    return createDaemonFileContentResponse(contentResult, {
+      headers: createRawFileHeaders(contentResult),
     });
   });
 

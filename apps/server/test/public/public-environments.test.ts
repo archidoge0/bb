@@ -6,6 +6,7 @@ import {
   reportQueuedCommandSuccess,
   waitForQueuedCommand,
 } from "../helpers/commands.js";
+import { registerHostRpcResponder } from "../helpers/host-rpc.js";
 import { readJson } from "../helpers/json.js";
 import {
   seedEnvironment,
@@ -14,6 +15,42 @@ import {
   seedThread,
 } from "../helpers/seed.js";
 import { withTestHarness } from "../helpers/test-app.js";
+
+function respondWithFileChunks(
+  harness: Parameters<typeof registerHostRpcResponder>[0],
+  args: {
+    hostId: string;
+    sessionId: string;
+    files: Map<string, { bytes: Buffer; mimeType: string }>;
+    rootPaths: string[];
+  },
+): void {
+  registerHostRpcResponder(harness, {
+    hostId: args.hostId,
+    sessionId: args.sessionId,
+    handle: ({ command }) => {
+      if (command.type !== "host.read_file_chunk")
+        throw new Error(`Unexpected command ${command.type}`);
+      args.rootPaths.push(command.rootPath);
+      const file = args.files.get(command.path);
+      if (!file) throw new Error(`Unexpected path ${command.path}`);
+      return {
+        ok: true,
+        result: {
+          path: command.path,
+          content: file.bytes
+            .subarray(command.offset, command.offset + command.length)
+            .toString("base64"),
+          offset: command.offset,
+          mimeType: file.mimeType,
+          modifiedAtMs: 1234,
+          sizeBytes: file.bytes.length,
+          revision: "0".repeat(64),
+        },
+      };
+    },
+  });
+}
 
 describe("public environments", () => {
   it("lists cached branch options while remotes refresh in the background", async () => {
@@ -794,6 +831,92 @@ describe("environment list and delete", () => {
       expect(response.status).toBe(409);
       expect(getEnvironment(harness.db, environment.id)?.status).not.toBe(
         "destroyed",
+      );
+    });
+  });
+
+  it("streams working-tree files from diff/file/raw with byte ranges", async () => {
+    await withTestHarness(async (harness) => {
+      const { host, session } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/raw-env",
+      });
+      const rootPaths: string[] = [];
+      respondWithFileChunks(harness, {
+        hostId: host.id,
+        sessionId: session.id,
+        files: new Map([
+          [
+            "/tmp/raw-env/dist/app.zip",
+            {
+              bytes: Buffer.from([0x50, 0x4b, 0x03, 0x04, 0, 1, 2, 3]),
+              mimeType: "application/zip",
+            },
+          ],
+        ]),
+        rootPaths,
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/environments/${environment.id}/diff/file/raw?target=uncommitted&side=new&path=dist/app.zip`,
+        { headers: { Range: "bytes=0-3" } },
+      );
+
+      expect(response.status).toBe(206);
+      expect(response.headers.get("content-range")).toBe("bytes 0-3/8");
+      expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+      expect(Buffer.from(await response.arrayBuffer())).toEqual(
+        Buffer.from([0x50, 0x4b, 0x03, 0x04]),
+      );
+      expect(new Set(rootPaths)).toEqual(new Set(["/tmp/raw-env"]));
+    });
+  });
+
+  it("serves a git revision from diff/file/raw as raw bytes", async () => {
+    await withTestHarness(async (harness) => {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/raw-ref-env",
+      });
+
+      const responsePromise = harness.app.request(
+        `/api/v1/environments/${environment.id}/diff/file/raw?target=uncommitted&side=old&path=logo.bin`,
+      );
+      const readCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) => command.type === "host.read_file",
+      );
+      expect(readCommand.command).toMatchObject({
+        path: "/tmp/raw-ref-env/logo.bin",
+        rootPath: "/tmp/raw-ref-env",
+        ref: "HEAD",
+      });
+      await reportQueuedCommandSuccess(harness, readCommand, {
+        path: "/tmp/raw-ref-env/logo.bin",
+        content: Buffer.from([0, 1, 2, 255]).toString("base64"),
+        contentEncoding: "base64",
+        mimeType: "application/octet-stream",
+        sizeBytes: 4,
+        sha256: "0".repeat(64),
+      });
+
+      const response = await responsePromise;
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-type")).toBe(
+        "application/octet-stream",
+      );
+      expect(Buffer.from(await response.arrayBuffer())).toEqual(
+        Buffer.from([0, 1, 2, 255]),
       );
     });
   });

@@ -6,29 +6,20 @@ import type { MarkdownLinkRouting } from "@/components/ui/markdown-link-routing.
 import { Skeleton } from "@bb/shared-ui/skeleton";
 import { EmptyStatePanel } from "@bb/shared-ui/empty-state";
 import {
-  fetchEnvironmentFileBlob,
   useEnvironmentDiffFiles,
   useEnvironment,
   useEnvironmentFilePreview,
 } from "@/hooks/queries/environment-queries";
-import {
-  fetchProjectFileBlob,
-  useProjectFilePreview,
-} from "@/hooks/queries/project-queries";
+import { useProjectFilePreview } from "@/hooks/queries/project-queries";
 import {
   useThreadHostFilePreview,
   useThreadStorageFilePreview,
 } from "@/hooks/queries/thread-queries";
-import {
-  fetchHostFileBlob,
-  useHostFilePreview,
-} from "@/hooks/queries/host-file-preview-query";
-import { fetchFileContentBlob } from "@/lib/api";
+import { useHostFilePreview } from "@/hooks/queries/host-file-preview-query";
 import {
   buildProjectFileContentUrl,
-  buildRawFilesystemHtmlContentUrl,
+  buildThreadRawFileUrl,
   buildThreadHostFileContentUrl,
-  buildThreadStorageContentUrl,
   buildThreadStorageRawContentUrl,
   buildThreadWorktreeRawContentUrl,
 } from "@/lib/file-content-urls";
@@ -391,16 +382,6 @@ export function WorkspaceFilePreviewTabContent({
       {...filePreviewQueryProps(workspaceFilePreviewQuery)}
       activePath={activePath}
       copyPath={copyPath}
-      fetchFileBlob={
-        environmentId && source
-          ? () =>
-              fetchEnvironmentFileBlob({
-                environmentId,
-                path: activePath,
-                source,
-              })
-          : undefined
-      }
       htmlPreviewUrl={
         threadId && source?.kind === "working-tree"
           ? buildThreadWorktreeRawContentUrl(threadId, activePath)
@@ -465,13 +446,6 @@ export function ProjectFilePreviewTabContent({
       {...filePreviewQueryProps(projectFilePreviewQuery)}
       activePath={activePath}
       copyPath={copyPath}
-      fetchFileBlob={() =>
-        fetchProjectFileBlob({
-          path: activePath,
-          projectId,
-          routing: { environmentId, hostId },
-        })
-      }
       lineRange={lineRange}
       markdownLinkRouting={resolvedMarkdownLinkRouting}
       onSelectionAddToChat={onSelectionAddToChat}
@@ -516,10 +490,7 @@ export function HostFilePreviewTabContent({
       {...filePreviewQueryProps(hostFilePreviewQuery)}
       activePath={activePath}
       copyPath={copyPath}
-      fetchFileBlob={() =>
-        fetchFileContentBlob(buildThreadHostFileContentUrl(threadId, activePath))
-      }
-      htmlPreviewUrl={buildRawFilesystemHtmlContentUrl(threadId, activePath)}
+      htmlPreviewUrl={buildThreadRawFileUrl(threadId, activePath)}
       lineRange={lineRange}
       markdownLinkRouting={resolvedMarkdownLinkRouting}
       onSelectionAddToChat={onSelectionAddToChat}
@@ -552,7 +523,6 @@ export function HostScopedFilePreviewTabContent({
       {...filePreviewQueryProps(hostFilePreviewQuery)}
       activePath={activePath}
       copyPath={activePath}
-      fetchFileBlob={() => fetchHostFileBlob({ hostId, path: activePath })}
       htmlPreviewUrl={hostFilePreviewUrl ?? null}
       lineRange={lineRange}
       markdownLinkRouting={markdownLinkRouting}
@@ -593,9 +563,6 @@ export function ThreadStorageFilePreviewTabContent({
       {...filePreviewQueryProps(threadStorageFilePreviewQuery)}
       activePath={activePath}
       copyPath={copyPath}
-      fetchFileBlob={() =>
-        fetchFileContentBlob(buildThreadStorageContentUrl(threadId, activePath))
-      }
       htmlPreviewUrl={buildThreadStorageRawContentUrl(threadId, activePath)}
       lineRange={lineRange}
       markdownLinkRouting={resolvedMarkdownLinkRouting}

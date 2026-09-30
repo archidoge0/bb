@@ -7,16 +7,9 @@ import type {
   PromptHistoryResponse,
   WorkspacePathListResponse,
 } from "@bb/server-contract";
-import {
-  buildFilePreview,
-  normalizeFilePreviewMimeType,
-  type FilePreview,
-} from "@bb/client-core";
-import {
-  createFileContentBlob,
-  decodeFileContentBytes,
-} from "@/lib/file-content-bytes";
-import { buildProjectFileContentUrl } from "@/lib/file-content-urls";
+import type { FilePreview } from "@bb/client-core";
+import { loadFilePreview } from "@/lib/api";
+import { buildProjectFileRawUrl } from "@/lib/file-content-urls";
 import { readProjectBranchOptions } from "@/lib/project-branch-options";
 import { sdk } from "@/lib/sdk";
 import { useProjectDetailRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
@@ -245,24 +238,6 @@ function projectFileRoutingQuery(routing: ProjectFileRouting) {
   return routing.hostId !== null ? { hostId: routing.hostId } : {};
 }
 
-export async function fetchProjectFileBlob({
-  path,
-  projectId,
-  routing,
-}: {
-  path: string;
-  projectId: string;
-  routing: ProjectFileRouting;
-}): Promise<Blob> {
-  return createFileContentBlob(
-    await sdk.projects.fileContent({
-      projectId,
-      path,
-      ...projectFileRoutingQuery(routing),
-    }),
-  );
-}
-
 export function useProjectFilePreview(
   projectId: string | undefined,
   path: string | null,
@@ -290,23 +265,18 @@ export function useProjectFilePreview(
         hookName: "useProjectFilePreview",
         argName: "path",
       });
-      const content = await sdk.projects.fileContent({
-        projectId: requiredProjectId,
-        path: requiredPath,
+      return loadFilePreview(
+        {
+          name: requiredPath.split("/").at(-1),
+          path: requiredPath,
+          url: buildProjectFileRawUrl(
+            requiredProjectId,
+            requiredPath,
+            projectFileRoutingQuery(routing),
+          ),
+        },
         signal,
-        ...projectFileRoutingQuery(routing),
-      });
-      return buildFilePreview({
-        contentBytes: decodeFileContentBytes(content),
-        mimeType: normalizeFilePreviewMimeType(content.mimeType),
-        name: requiredPath.split("/").at(-1),
-        path: requiredPath,
-        url: buildProjectFileContentUrl(
-          requiredProjectId,
-          requiredPath,
-          projectFileRoutingQuery(routing),
-        ),
-      });
+      );
     },
     enabled,
     ...EXPENSIVE_MANUAL_QUERY_POLICY,
