@@ -26,6 +26,7 @@ interface SecondaryPanelFilePreviewProps {
   activePath: string;
   copyPath?: string | null;
   error?: Error | null;
+  fetchFileBlob?: () => Promise<Blob>;
   filePreview: FilePreview | undefined;
   htmlPreviewUrl?: string | null;
   isLoading: boolean;
@@ -161,9 +162,9 @@ function resolveSecondaryPanelFilePreviewState({
   return {
     kind: "unsupported",
     file: {
-      content: filePreview.content,
       mimeType: filePreview.mimeType,
       name: filePreview.name ?? activePath.split("/").at(-1) ?? activePath,
+      sizeBytes: filePreview.sizeBytes,
     },
   };
 }
@@ -172,6 +173,7 @@ export function SecondaryPanelFilePreview({
   activePath,
   copyPath = null,
   error,
+  fetchFileBlob,
   filePreview,
   htmlPreviewUrl = null,
   isLoading,
@@ -195,6 +197,7 @@ export function SecondaryPanelFilePreview({
     <FilePreviewSurface
       path={activePath}
       copyPath={copyPath}
+      fetchFileBlob={fetchFileBlob}
       onSelectionAddToChat={onSelectionAddToChat}
       onOpenInEditor={onOpenInEditor}
       onRefresh={onRefresh}

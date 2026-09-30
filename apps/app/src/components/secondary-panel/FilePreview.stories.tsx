@@ -401,12 +401,17 @@ export function Overview() {
             path={ARCHIVE_PATH}
             copyPath={copyPathFor(ARCHIVE_PATH)}
             onOpenInEditor={noopOpenInEditor}
+            fetchFileBlob={async () =>
+              new Blob([new Uint8Array(2_457_600)], {
+                type: "application/zip",
+              })
+            }
             state={{
               kind: "unsupported",
               file: {
-                content: new Uint8Array(2_457_600),
                 mimeType: "application/zip",
                 name: "report-with-images.zip",
+                sizeBytes: 2_457_600,
               },
             }}
           />

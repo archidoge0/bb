@@ -12,7 +12,10 @@ import {
   normalizeFilePreviewMimeType,
   type FilePreview,
 } from "@bb/client-core";
-import { decodeBase64Bytes } from "@/lib/base64-bytes";
+import {
+  createFileContentBlob,
+  decodeFileContentBytes,
+} from "@/lib/file-content-bytes";
 import { buildProjectFileContentUrl } from "@/lib/file-content-urls";
 import { readProjectBranchOptions } from "@/lib/project-branch-options";
 import { sdk } from "@/lib/sdk";
@@ -230,10 +233,40 @@ export function useProjectPathSuggestions(args: UseProjectPathSuggestionsArgs) {
   });
 }
 
+interface ProjectFileRouting {
+  environmentId: string | null;
+  hostId: string | null;
+}
+
+function projectFileRoutingQuery(routing: ProjectFileRouting) {
+  if (routing.environmentId !== null) {
+    return { environmentId: routing.environmentId };
+  }
+  return routing.hostId !== null ? { hostId: routing.hostId } : {};
+}
+
+export async function fetchProjectFileBlob({
+  path,
+  projectId,
+  routing,
+}: {
+  path: string;
+  projectId: string;
+  routing: ProjectFileRouting;
+}): Promise<Blob> {
+  return createFileContentBlob(
+    await sdk.projects.fileContent({
+      projectId,
+      path,
+      ...projectFileRoutingQuery(routing),
+    }),
+  );
+}
+
 export function useProjectFilePreview(
   projectId: string | undefined,
   path: string | null,
-  routing: { environmentId: string | null; hostId: string | null },
+  routing: ProjectFileRouting,
   options?: QueryOptions,
 ) {
   const enabled =
@@ -261,28 +294,18 @@ export function useProjectFilePreview(
         projectId: requiredProjectId,
         path: requiredPath,
         signal,
-        ...(routing.environmentId !== null
-          ? { environmentId: routing.environmentId }
-          : routing.hostId !== null
-            ? { hostId: routing.hostId }
-            : {}),
+        ...projectFileRoutingQuery(routing),
       });
-      const contentBytes =
-        content.contentEncoding === "base64"
-          ? decodeBase64Bytes(content.content)
-          : new TextEncoder().encode(content.content);
       return buildFilePreview({
-        contentBytes,
+        contentBytes: decodeFileContentBytes(content),
         mimeType: normalizeFilePreviewMimeType(content.mimeType),
         name: requiredPath.split("/").at(-1),
         path: requiredPath,
-        url: buildProjectFileContentUrl(requiredProjectId, requiredPath, {
-          ...(routing.environmentId !== null
-            ? { environmentId: routing.environmentId }
-            : routing.hostId !== null
-              ? { hostId: routing.hostId }
-              : {}),
-        }),
+        url: buildProjectFileContentUrl(
+          requiredProjectId,
+          requiredPath,
+          projectFileRoutingQuery(routing),
+        ),
       });
     },
     enabled,

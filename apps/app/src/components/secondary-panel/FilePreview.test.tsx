@@ -94,6 +94,10 @@ const pierreMock = vi.hoisted(() => {
   };
 });
 
+const downloadBlobMock = vi.hoisted(() => vi.fn());
+
+vi.mock("@/lib/download-blob", () => ({ downloadBlob: downloadBlobMock }));
+
 vi.mock("@pierre/diffs/react", async () => {
   const React = await import("react");
 
@@ -1012,15 +1016,18 @@ describe("FilePreview", () => {
     expect(screen.getByRole("alert").textContent).toBe("Failed to load file");
   });
 
-  it("describes an unsupported file without announcing an alert", () => {
+  it("fetches an unsupported file only when Download is clicked", async () => {
+    const blob = new Blob(["zip bytes"], { type: "application/zip" });
+    const fetchFileBlob = vi.fn(async () => blob);
     render(
       <SecondaryPanelFilePreview
         activePath="qa/report-with-images.zip"
+        fetchFileBlob={fetchFileBlob}
         filePreview={{
           kind: "unsupported",
-          content: new Uint8Array(2048),
           mimeType: "application/zip",
           path: "qa/report-with-images.zip",
+          sizeBytes: 2048,
           url: "/api/v1/preview/report",
         }}
         isLoading={false}
@@ -1030,7 +1037,17 @@ describe("FilePreview", () => {
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.getByText("report-with-images.zip")).not.toBeNull();
     expect(screen.getByText("application/zip · 2.0 KB")).not.toBeNull();
-    expect(screen.getByRole("button", { name: "Download" })).not.toBeNull();
+    expect(fetchFileBlob).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Download" }));
+
+    await waitFor(() =>
+      expect(downloadBlobMock).toHaveBeenCalledWith(
+        blob,
+        "report-with-images.zip",
+      ),
+    );
+    expect(fetchFileBlob).toHaveBeenCalledTimes(1);
   });
 
   it("does not show the file preview actions menu for non-text previews", () => {

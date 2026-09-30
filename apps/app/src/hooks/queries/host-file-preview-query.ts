@@ -1,5 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
-import { decodeBase64Bytes, encodeBase64Bytes } from "@/lib/base64-bytes";
+import { encodeBase64Bytes } from "@/lib/base64-bytes";
+import {
+  createFileContentBlob,
+  decodeFileContentBytes,
+} from "@/lib/file-content-bytes";
 import { sdk } from "@/lib/sdk";
 import {
   buildFilePreview,
@@ -70,6 +74,16 @@ function getHostMediaPreviewType(name: string): HostMediaPreviewType | null {
   );
 }
 
+export async function fetchHostFileBlob({
+  hostId,
+  path,
+}: {
+  hostId: string;
+  path: string;
+}): Promise<Blob> {
+  return createFileContentBlob(await sdk.files.read({ hostId, path }));
+}
+
 export function useHostFilePreview(
   hostId: string | null,
   path: string | null,
@@ -104,10 +118,7 @@ export function useHostFilePreview(
         path: activePath,
         signal,
       });
-      const contentBytes =
-        response.contentEncoding === "base64"
-          ? decodeBase64Bytes(response.content)
-          : new TextEncoder().encode(response.content);
+      const contentBytes = decodeFileContentBytes(response);
       const mimeType = normalizeFilePreviewMimeType(response.mimeType ?? null);
       const preview = buildFilePreview({
         contentBytes,

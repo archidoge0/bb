@@ -187,6 +187,13 @@ export async function transcribeVoiceInput(
   );
 }
 
+export async function fetchFileContentBlob(url: string): Promise<Blob> {
+  const response = await requestResponse(
+    fetch(url, appSurfaceRequestInit({ method: "GET" })),
+  );
+  return response.blob();
+}
+
 export async function getThreadStorageFilePreview(
   id: string,
   path: string,

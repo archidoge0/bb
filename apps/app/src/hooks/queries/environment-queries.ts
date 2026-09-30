@@ -20,7 +20,11 @@ import {
   type EnvironmentFilePreviewSource,
   type FilePreview,
 } from "@bb/client-core";
-import { decodeBase64Bytes, encodeBase64Bytes } from "@/lib/base64-bytes";
+import { encodeBase64Bytes } from "@/lib/base64-bytes";
+import {
+  createFileContentBlob,
+  decodeFileContentBytes,
+} from "@/lib/file-content-bytes";
 import { buildEnvironmentDiffFileContentUrl } from "@/lib/file-content-urls";
 import { sdk } from "@/lib/sdk";
 import { useEnvironmentDetailRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
@@ -407,6 +411,22 @@ function buildEnvironmentFilePreviewQuery(
     : { target: "uncommitted", path, side };
 }
 
+export async function fetchEnvironmentFileBlob({
+  environmentId,
+  path,
+  source,
+}: {
+  environmentId: string;
+  path: string;
+  source: EnvironmentFilePreviewSource;
+}): Promise<Blob> {
+  const response = await sdk.environments.diffFile({
+    environmentId,
+    ...buildEnvironmentFilePreviewQuery(path, source),
+  });
+  return createFileContentBlob(response);
+}
+
 export function buildEnvironmentFilePreview({
   contentUrl,
   path,
@@ -416,10 +436,7 @@ export function buildEnvironmentFilePreview({
   path: string;
   response: EnvironmentDiffFileResponse;
 }): FilePreview {
-  const contentBytes =
-    response.contentEncoding === "base64"
-      ? decodeBase64Bytes(response.content)
-      : new TextEncoder().encode(response.content);
+  const contentBytes = decodeFileContentBytes(response);
   const mimeType = normalizeFilePreviewMimeType(response.mimeType ?? null);
   const preview = buildFilePreview({
     contentBytes,
