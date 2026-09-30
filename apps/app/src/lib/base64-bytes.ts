@@ -1,4 +1,4 @@
-export function decodeBase64Bytes(content: string): Uint8Array {
+export function decodeBase64Bytes(content: string): Uint8Array<ArrayBuffer> {
   const binaryContent = atob(content);
   const bytes = new Uint8Array(binaryContent.length);
   for (let index = 0; index < binaryContent.length; index += 1) {

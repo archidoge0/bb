@@ -51,6 +51,7 @@ export interface TextFilePreview extends FilePreviewBase {
 
 interface UnsupportedFilePreview extends FilePreviewBase {
   kind: "unsupported";
+  content: Uint8Array<ArrayBuffer>;
 }
 
 export type FilePreview =
@@ -163,7 +164,7 @@ export function areEnvironmentFilePreviewSourcesEqual(
 }
 
 interface BuildFilePreviewArgs extends FilePreviewTarget {
-  contentBytes: Uint8Array;
+  contentBytes: Uint8Array<ArrayBuffer>;
   mimeType: string;
 }
 
@@ -254,6 +255,7 @@ export function buildFilePreview(args: BuildFilePreviewArgs): FilePreview {
       return {
         kind: "unsupported",
         ...base,
+        content: args.contentBytes,
       };
     }
     return {
@@ -282,5 +284,6 @@ export function buildFilePreview(args: BuildFilePreviewArgs): FilePreview {
   return {
     kind: "unsupported",
     ...base,
+    content: args.contentBytes,
   };
 }

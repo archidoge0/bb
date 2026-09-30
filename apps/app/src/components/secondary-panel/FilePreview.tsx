@@ -40,6 +40,8 @@ import {
 } from "@bb/shared-ui/tooltip";
 import { TruncateStart } from "@/components/ui/truncate-start.js";
 import { copyToClipboardWithToast } from "@/lib/clipboard";
+import { downloadBlob } from "@/lib/download-blob";
+import { formatByteSize } from "@/lib/format-byte-size";
 import { openUrlInExternalBrowser } from "@/lib/url-open-routing";
 import type {
   FilePreviewLineRange,
@@ -60,6 +62,12 @@ export interface FilePreviewFile {
   contents: string;
 }
 
+export interface UnsupportedFilePreviewFile {
+  content: Uint8Array<ArrayBuffer>;
+  mimeType: string;
+  name: string;
+}
+
 type IframePreviewSandbox = "allow-scripts";
 
 interface IframeFilePreviewTarget {
@@ -73,7 +81,7 @@ export type FilePreviewState =
   | { kind: "empty" }
   | { kind: "not-found" }
   | { kind: "error"; message?: string }
-  | { kind: "unsupported"; message: string }
+  | { kind: "unsupported"; file: UnsupportedFilePreviewFile }
   | { kind: "image"; url: string }
   | { kind: "video"; url: string }
   | ({ kind: "iframe" } & IframeFilePreviewTarget)
@@ -169,6 +177,10 @@ interface FilePreviewImageProps {
 interface FilePreviewVideoProps {
   url: string;
   title: string;
+}
+
+interface UnsupportedFilePreviewProps {
+  file: UnsupportedFilePreviewFile;
 }
 
 interface FilePreviewMessageProps {
@@ -603,7 +615,7 @@ function FilePreviewBody({
     );
   }
   if (state.kind === "unsupported") {
-    return <FilePreviewMessage message={state.message} />;
+    return <UnsupportedFilePreview file={state.file} />;
   }
   if (state.kind === "image") {
     return <FilePreviewImage url={state.url} alt={path} />;
@@ -1296,6 +1308,41 @@ function IframeFilePreview({
         onLoad={() => onLoadStateChange("loaded")}
         onError={() => onLoadStateChange("error")}
       />
+    </div>
+  );
+}
+
+function UnsupportedFilePreview({ file }: UnsupportedFilePreviewProps) {
+  return (
+    <div className="flex flex-col items-center gap-4 px-6 py-12 text-center">
+      <div className="flex size-12 items-center justify-center rounded-lg bg-surface-raised text-muted-foreground">
+        <Icon name="File" className="size-6" aria-hidden />
+      </div>
+      <div className="flex max-w-full min-w-0 flex-col gap-1">
+        <p className="truncate text-sm font-medium text-foreground">
+          {file.name}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          {`${file.mimeType} · ${formatByteSize(file.content.byteLength)}`}
+        </p>
+      </div>
+      <p className="text-sm text-muted-foreground">
+        This file type can't be previewed.
+      </p>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() =>
+          downloadBlob(
+            new Blob([file.content], { type: file.mimeType }),
+            file.name,
+          )
+        }
+      >
+        <Icon name="Download" aria-hidden />
+        Download
+      </Button>
     </div>
   );
 }

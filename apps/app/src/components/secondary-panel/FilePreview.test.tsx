@@ -1012,15 +1012,15 @@ describe("FilePreview", () => {
     expect(screen.getByRole("alert").textContent).toBe("Failed to load file");
   });
 
-  it("does not announce an unsupported preview type as an alert", () => {
+  it("describes an unsupported file without announcing an alert", () => {
     render(
       <SecondaryPanelFilePreview
-        activePath="docs/report.pdf"
+        activePath="qa/report-with-images.zip"
         filePreview={{
           kind: "unsupported",
-          mimeType: "application/pdf",
-          name: "report.pdf",
-          path: "docs/report.pdf",
+          content: new Uint8Array(2048),
+          mimeType: "application/zip",
+          path: "qa/report-with-images.zip",
           url: "/api/v1/preview/report",
         }}
         isLoading={false}
@@ -1028,9 +1028,9 @@ describe("FilePreview", () => {
     );
 
     expect(screen.queryByRole("alert")).toBeNull();
-    expect(
-      screen.getByText("Preview not available for application/pdf."),
-    ).not.toBeNull();
+    expect(screen.getByText("report-with-images.zip")).not.toBeNull();
+    expect(screen.getByText("application/zip · 2.0 KB")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Download" })).not.toBeNull();
   });
 
   it("does not show the file preview actions menu for non-text previews", () => {

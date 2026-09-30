@@ -160,7 +160,11 @@ function resolveSecondaryPanelFilePreviewState({
 
   return {
     kind: "unsupported",
-    message: `Preview not available for ${filePreview.mimeType}.`,
+    file: {
+      content: filePreview.content,
+      mimeType: filePreview.mimeType,
+      name: filePreview.name ?? activePath.split("/").at(-1) ?? activePath,
+    },
   };
 }
 

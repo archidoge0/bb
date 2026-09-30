@@ -114,12 +114,14 @@ describe("file-preview", () => {
       mimeType: "text/plain",
       path: "broken.txt",
       url: "/files/broken.txt",
+      content: Uint8Array.from([97, 0, 98]),
     });
     expect(binaryPreview).toEqual({
       kind: "unsupported",
       mimeType: "application/octet-stream",
       path: "archive.bin",
       url: "/files/archive.bin",
+      content: Uint8Array.from([0, 1, 2, 3]),
     });
   });
 
