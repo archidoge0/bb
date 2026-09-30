@@ -89,8 +89,10 @@ attribute, so the browser streams it to disk without the 25 MB limit.
 weak metadata ETags (`W/"file-<revision>"`), not content SHA-256 hashes. This
 avoids reading an entire large file just to validate it. Because the validator
 is weak, any `If-Range` header falls back to a full `200` response, including a
-matching weak tag or date. HTML responses always carry the sandbox CSP and
-no-store policy, at any size; the app renders an HTML iframe only for files up
+matching weak tag or date. All raw file responses carry `Content-Security-Policy:
+sandbox allow-scripts`, including SVG and XHTML, so directly opened documents
+cannot acquire the app's origin privileges. HTML also carries the no-store
+policy, at any size; the app renders an HTML iframe only for files up
 to 5 MiB and shows larger HTML as source or, past 25 MB, as a Download.
 
 The server uses `host.read_file_chunk` for a metadata-only probe (`length: 0`),

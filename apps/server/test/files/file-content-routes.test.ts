@@ -99,6 +99,34 @@ function serveFiles(
 }
 
 describe("file content routes", () => {
+  it.each([
+    ["svg", "image/svg+xml"],
+    ["xhtml", "application/xhtml+xml"],
+  ])("sends a sandbox policy for %s documents", async (extension, mimeType) => {
+    await withTestHarness(async (harness) => {
+      const { host, session, thread } = seedThreadFixture(harness);
+      const bytes = Buffer.from("<script>alert(document.domain)</script>");
+      serveFiles(harness, {
+        hostId: host.id,
+        sessionId: session.id,
+        files: new Map([[`/tmp/probe.${extension}`, { bytes, mimeType }]]),
+      });
+      const url = `/api/v1/threads/${thread.id}/host-files/tmp/probe.${extension}`;
+      for (const headers of [
+        new Headers(),
+        new Headers({ range: "bytes=0-15" }),
+      ]) {
+        const response = await harness.app.request(url, { headers });
+        expect(response.status).toBe(headers.has("range") ? 206 : 200);
+        expect(response.headers.get("content-type")).toBe(mimeType);
+        expect(response.headers.get("content-security-policy")).toBe(
+          "sandbox allow-scripts",
+        );
+        await response.arrayBuffer();
+      }
+    });
+  });
+
   it("streams thread storage with ranges and sandboxed HTML", async () => {
     await withTestHarness(async (harness) => {
       const { host, session, thread } = seedThreadFixture(harness);
