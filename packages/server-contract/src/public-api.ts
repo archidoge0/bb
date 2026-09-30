@@ -83,7 +83,6 @@ import type {
   PathId,
   PathProjectId,
   PathPreviewAndFilePath,
-  PathThreadAndFilePath,
   PathThreadAndQueuedMessage,
   PathTerminal,
 } from "./common.js";
@@ -161,7 +160,6 @@ import type {
   ProjectBranchesResponse,
   ProjectCommandsQuery,
   ProjectDefaultExecutionOptionsQuery,
-  ProjectFileContentQuery,
   ProjectFilesQuery,
   ProjectListQuery,
   ProjectPathsQuery,
@@ -231,9 +229,7 @@ import type {
   ThreadEventsQuery,
   ThreadSectionMutationResponse,
   ThreadSectionResponse,
-  ThreadFilesRawQuery,
   ThreadGetQuery,
-  ThreadHostFileContentQuery,
   ThreadCountQuery,
   ThreadCountResponse,
   ThreadListQuery,
@@ -252,7 +248,6 @@ import type {
   ThreadPluginMetadataResponse,
   ThreadSearchQuery,
   ThreadSearchResponse,
-  ThreadStorageContentQuery,
   ThreadStorageFileListResponse,
   ThreadStorageFilesQuery,
   ThreadStorageLocationResponse,
@@ -335,7 +330,6 @@ import {
   projectBranchesQuerySchema,
   projectCommandsQuerySchema,
   projectDefaultExecutionOptionsQuerySchema,
-  projectFileContentQuerySchema,
   projectFilesQuerySchema,
   projectListQuerySchema,
   projectPathsQuerySchema,
@@ -366,15 +360,12 @@ import {
   systemAppUpdateQuerySchema,
   threadEventWaitQuerySchema,
   threadEventsQuerySchema,
-  threadFilesRawQuerySchema,
   threadGetQuerySchema,
-  threadHostFileContentQuerySchema,
   threadCountQuerySchema,
   threadListQuerySchema,
   threadOpenRequestSchema,
   threadPaneActionRequestSchema,
   threadSearchQuerySchema,
-  threadStorageContentQuerySchema,
   threadStorageFilesQuerySchema,
   threadStoragePathsQuerySchema,
   terminalInputRequestSchema,
@@ -542,22 +533,6 @@ export const publicApiRoutes = {
         projectFilesQuerySchema,
       ),
       response: jsonResponse<WorkspaceFileListResponse>(),
-    }),
-    fileContent: defineRoute({
-      path: "/projects/:id/files/content",
-      method: "get",
-      request: queryRequest<PathProjectId, ProjectFileContentQuery>(
-        projectFileContentQuerySchema,
-      ),
-      response: binaryResponse<Uint8Array>(),
-    }),
-    fileRaw: defineRoute({
-      path: "/projects/:id/files/raw",
-      method: "get",
-      request: queryRequest<PathProjectId, ProjectFileContentQuery>(
-        projectFileContentQuerySchema,
-      ),
-      response: binaryResponse<Uint8Array>(),
     }),
     paths: defineRoute({
       path: "/projects/:id/paths",
@@ -1173,14 +1148,6 @@ export const publicApiRoutes = {
       ),
       response: jsonResponse<EnvironmentDiffFileResponse>(),
     }),
-    diffFileRaw: defineRoute({
-      path: "/environments/:id/diff/file/raw",
-      method: "get",
-      request: queryRequest<PathId, EnvironmentDiffFileQuery>(
-        environmentDiffFileQuerySchema,
-      ),
-      response: binaryResponse<Uint8Array>(),
-    }),
     diffBranches: defineRoute({
       path: "/environments/:id/diff/branches",
       method: "get",
@@ -1694,12 +1661,6 @@ export const publicApiRoutes = {
       request: noRequest<PathId>(),
       response: jsonResponse<ThreadStorageLocationResponse>(),
     }),
-    storageFile: defineRoute({
-      path: "/threads/:id/thread-storage/files/:filePath{.+}",
-      method: "get",
-      request: noRequest<PathThreadAndFilePath>(),
-      response: binaryResponse<Uint8Array>(),
-    }),
     storagePaths: defineRoute({
       path: "/threads/:id/thread-storage/paths",
       method: "get",
@@ -1707,36 +1668,6 @@ export const publicApiRoutes = {
         threadStoragePathsQuerySchema,
       ),
       response: jsonResponse<ThreadStoragePathListResponse>(),
-    }),
-    storageContent: defineRoute({
-      path: "/threads/:id/thread-storage/content",
-      method: "get",
-      request: queryRequest<PathId, ThreadStorageContentQuery>(
-        threadStorageContentQuerySchema,
-      ),
-      response: binaryResponse<Uint8Array>(),
-    }),
-    hostFileContent: defineRoute({
-      path: "/threads/:id/host-files/content",
-      method: "get",
-      request: queryRequest<PathId, ThreadHostFileContentQuery>(
-        threadHostFileContentQuerySchema,
-      ),
-      response: binaryResponse<Uint8Array>(),
-    }),
-    worktreeFile: defineRoute({
-      path: "/threads/:id/worktree/files/:filePath{.+}",
-      method: "get",
-      request: noRequest<PathThreadAndFilePath>(),
-      response: binaryResponse<Uint8Array>(),
-    }),
-    rawFile: defineRoute({
-      path: "/threads/:id/files/raw",
-      method: "get",
-      request: queryRequest<PathId, ThreadFilesRawQuery>(
-        threadFilesRawQuerySchema,
-      ),
-      response: binaryResponse<Uint8Array>(),
     }),
   },
 

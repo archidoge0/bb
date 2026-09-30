@@ -6,22 +6,22 @@ import {
 } from "@/lib/absolute-file-path";
 import {
   buildFilePreviewLeaseContentUrl,
-  buildThreadHostFileContentUrl,
   getFilePreviewLeaseBaseUrl,
 } from "@/lib/file-content-urls";
+import { hostRootRelativePath } from "@/lib/file-lease";
 
 const ROUTE_ROOT = "/__bb_markdown_file_root__";
 
 export function buildMarkdownFileImageRouting({
   path,
   rootPath,
-  threadId,
+  hostFileBaseUrl,
   linkRouting,
   resolveRelativeSrc,
 }: {
   path: string;
   rootPath: string | null;
-  threadId: string | null;
+  hostFileBaseUrl: string | null;
   linkRouting?: MarkdownLinkRouting;
   resolveRelativeSrc: (
     rootRelativePath: string,
@@ -39,7 +39,7 @@ export function buildMarkdownFileImageRouting({
     ...linkRouting,
     localImage: {
       absolutePaths:
-        threadId === null
+        hostFileBaseUrl === null
           ? { kind: "contained", rootPath: root }
           : { kind: "trusted-host" },
       relativePaths: {
@@ -47,8 +47,11 @@ export function buildMarkdownFileImageRouting({
         rootPath: root,
       },
       resolveSrc: (image, sourceKind) => {
-        if (sourceKind === "absolute" && threadId !== null) {
-          return buildThreadHostFileContentUrl(threadId, image.path);
+        if (sourceKind === "absolute" && hostFileBaseUrl !== null) {
+          return buildFilePreviewLeaseContentUrl(
+            hostFileBaseUrl,
+            hostRootRelativePath(image.path),
+          );
         }
         return resolveRelativeSrc(
           image.path.slice(root === "/" ? 1 : root.length + 1),
@@ -73,7 +76,7 @@ export function buildMarkdownLeaseImageRouting({
   return buildMarkdownFileImageRouting({
     path,
     rootPath,
-    threadId: null,
+    hostFileBaseUrl: null,
     resolveRelativeSrc: (relativePath) =>
       buildFilePreviewLeaseContentUrl(baseUrl, relativePath),
   });

@@ -11,6 +11,7 @@ import { type IconName } from "@bb/shared-ui/icon";
 import { MarkdownPreview } from "@/components/ui/markdown-preview.js";
 import type { MarkdownLinkRouting } from "@/components/ui/markdown-link-routing.js";
 import { buildMarkdownMessageLinkRouting } from "@/components/ui/markdown-message-link-routing";
+import { useTimelineHostFileBaseUrl } from "./ThreadHostFileLeaseContext";
 import { cn } from "@bb/shared-ui/lib/utils";
 import type { PromptMentionLinkResolver } from "@/components/promptbox/editor/prompt-mention-link";
 import {
@@ -476,15 +477,16 @@ export const GeneratedConversationMessage = memo(
       [mentions, messageText.length, trimStartLength],
     );
     const requestLabel = turnRequestLabel(turnRequest);
+    const hostFileBaseUrl = useTimelineHostFileBaseUrl(threadId);
     const linkRouting = useMemo<MarkdownLinkRouting | undefined>(
       () =>
         buildMarkdownMessageLinkRouting({
+          hostFileBaseUrl,
           onOpenLink,
           onOpenLocalFileLink,
-          threadId,
           workspaceRootPath,
         }),
-      [onOpenLink, onOpenLocalFileLink, threadId, workspaceRootPath],
+      [hostFileBaseUrl, onOpenLink, onOpenLocalFileLink, workspaceRootPath],
     );
     const title = useMemo(
       () =>

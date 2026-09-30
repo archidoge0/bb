@@ -1,11 +1,10 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   Environment,
   ThreadPullRequest,
   WorkspaceDiffTarget,
 } from "@bb/domain";
 import type {
-  EnvironmentDiffFileQuery,
   EnvironmentDiffBranchesResponse,
   EnvironmentDiffFilesResponse,
   EnvironmentPullRequestResponse,
@@ -18,7 +17,8 @@ import type {
   FilePreview,
 } from "@bb/client-core";
 import { loadFilePreview } from "@/lib/api";
-import { buildEnvironmentDiffFileRawUrl } from "@/lib/file-content-urls";
+import { environmentFileLeaseTarget } from "@/lib/file-lease";
+import { fetchFileLeaseUrl } from "./file-lease-queries";
 import { sdk } from "@/lib/sdk";
 import { useEnvironmentDetailRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
 import {
@@ -246,6 +246,7 @@ export function useEnvironmentFilePreview(
     Boolean(path) &&
     source !== null;
   useEnvironmentDetailRealtimeSubscription(environmentId, { enabled });
+  const queryClient = useQueryClient();
 
   return useQuery<FilePreview>({
     queryKey: environmentFilePreviewQueryKey(environmentId, path, source),
@@ -268,9 +269,10 @@ export function useEnvironmentFilePreview(
         {
           name: resolvedPath.split("/").at(-1),
           path: resolvedPath,
-          url: buildEnvironmentDiffFileRawUrl(
-            resolvedEnvironmentId,
-            buildEnvironmentFilePreviewQuery(resolvedPath, resolvedSource),
+          url: await fetchFileLeaseUrl(
+            queryClient,
+            environmentFileLeaseTarget(resolvedEnvironmentId, resolvedSource),
+            resolvedPath,
           ),
         },
         signal,
@@ -386,15 +388,5 @@ function buildEnvironmentDiffArgs(
     case "commit":
       return { environmentId, sha: target.sha, target: target.type };
   }
-}
-
-function buildEnvironmentFilePreviewQuery(
-  path: string,
-  source: EnvironmentFilePreviewSource,
-): EnvironmentDiffFileQuery {
-  const side = source.kind === "working-tree" ? "new" : "old";
-  return source.kind === "merge-base"
-    ? { target: "branch_committed", mergeBaseRef: source.ref, path, side }
-    : { target: "uncommitted", path, side };
 }
 

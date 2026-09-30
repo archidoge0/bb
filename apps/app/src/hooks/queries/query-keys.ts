@@ -1,6 +1,7 @@
 import type { WorkspaceDiffTarget } from "@bb/domain";
 import type { ThreadListFilters, ThreadSearchFilters } from "@bb/client-core";
 import type { EnvironmentFilePreviewSource } from "@bb/client-core";
+import type { FileLeaseTarget } from "@/lib/file-lease";
 import {
   DEFAULT_THREAD_STORAGE_FILE_LIST_OPTIONS,
   type ThreadStorageFileListOptions,
@@ -41,6 +42,7 @@ const THREAD_STORAGE_PATHS_QUERY_KEY = "threadStoragePaths";
 const THREAD_STORAGE_FILE_PREVIEW_QUERY_KEY = "threadStorageFilePreview";
 const THREAD_HOST_FILE_PREVIEW_QUERY_KEY = "threadHostFilePreview";
 const HOST_FILE_PREVIEW_QUERY_KEY = "hostFilePreview";
+const FILE_LEASE_QUERY_KEY = "fileLease";
 const ENVIRONMENT_QUERY_KEY = "environment";
 export const ENVIRONMENT_WORK_STATUS_QUERY_KEY = "environmentWorkStatus";
 const ENVIRONMENT_PULL_REQUEST_QUERY_KEY = "environmentPullRequest";
@@ -307,6 +309,10 @@ type HostFilePreviewQueryKey = readonly [
   typeof HOST_FILE_PREVIEW_QUERY_KEY,
   string | null,
   string | null,
+];
+type FileLeaseQueryKey = readonly [
+  typeof FILE_LEASE_QUERY_KEY,
+  FileLeaseTarget | null,
 ];
 type EnvironmentQueryKeyPrefix = readonly [typeof ENVIRONMENT_QUERY_KEY];
 type EnvironmentQueryKey = readonly [
@@ -848,6 +854,12 @@ export function threadHostFilePreviewQueryKey(
   path: string | null,
 ): ThreadHostFilePreviewQueryKey {
   return [THREAD_HOST_FILE_PREVIEW_QUERY_KEY, threadId, environmentId, path];
+}
+
+export function fileLeaseQueryKey(
+  target: FileLeaseTarget | null,
+): FileLeaseQueryKey {
+  return [FILE_LEASE_QUERY_KEY, target];
 }
 
 export function hostFilePreviewQueryKey(

@@ -4,25 +4,26 @@ import type {
 } from "./markdown-link-routing.js";
 import type { MarkdownPreviewLinkHandler } from "./markdown-link.js";
 import type { MarkdownPreviewLocalFileLinkHandler } from "./markdown-local-file-link.js";
-import { buildThreadHostFileContentUrl } from "@/lib/file-content-urls";
+import { buildFilePreviewLeaseContentUrl } from "@/lib/file-content-urls";
+import { hostRootRelativePath } from "@/lib/file-lease";
 
 interface BuildMarkdownMessageLinkRoutingArgs {
+  hostFileBaseUrl: string | null;
   onOpenLink?: MarkdownPreviewLinkHandler;
   onOpenLocalFileLink?: MarkdownPreviewLocalFileLinkHandler;
-  threadId?: string;
   workspaceRootPath?: string;
 }
 
 export function buildMarkdownMessageLinkRouting({
+  hostFileBaseUrl,
   onOpenLink,
   onOpenLocalFileLink,
-  threadId,
   workspaceRootPath,
 }: BuildMarkdownMessageLinkRoutingArgs): MarkdownLinkRouting | undefined {
   if (
     onOpenLink === undefined &&
     onOpenLocalFileLink === undefined &&
-    threadId === undefined
+    hostFileBaseUrl === null
   ) {
     return undefined;
   }
@@ -31,10 +32,14 @@ export function buildMarkdownMessageLinkRouting({
   if (onOpenLink !== undefined) {
     routing.onOpenLink = onOpenLink;
   }
-  if (threadId !== undefined) {
+  if (hostFileBaseUrl !== null) {
     routing.localImage = {
       absolutePaths: { kind: "trusted-host" },
-      resolveSrc: ({ path }) => buildThreadHostFileContentUrl(threadId, path),
+      resolveSrc: ({ path }) =>
+        buildFilePreviewLeaseContentUrl(
+          hostFileBaseUrl,
+          hostRootRelativePath(path),
+        ),
       ...(workspaceRootPath === undefined
         ? {}
         : {

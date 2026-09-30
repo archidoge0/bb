@@ -526,7 +526,7 @@ describe("FilePreview", () => {
           iframe: {
             sandbox: "allow-scripts",
             title: "docs/progress-vis.html",
-            url: "/api/v1/threads/thr_1/worktree/files/docs/progress-vis.html",
+            url: "/api/v1/file-previews/lease_1/docs/progress-vis.html",
           },
           lineRange: null,
         }}
@@ -538,7 +538,7 @@ describe("FilePreview", () => {
     );
 
     expect(openSpy).toHaveBeenCalledWith(
-      `${window.location.origin}/api/v1/threads/thr_1/worktree/files/docs/progress-vis.html`,
+      `${window.location.origin}/api/v1/file-previews/lease_1/docs/progress-vis.html`,
       "_blank",
       "noopener,noreferrer",
     );
@@ -620,7 +620,7 @@ describe("FilePreview", () => {
           iframe: {
             sandbox: "allow-scripts",
             title: "docs/progress-vis.html",
-            url: "/api/v1/threads/thr_1/worktree/files/docs/progress-vis.html",
+            url: "/api/v1/file-previews/lease_1/docs/progress-vis.html",
           },
           lineRange: null,
         }}
@@ -661,7 +661,7 @@ describe("FilePreview", () => {
             kind: "iframe",
             sandbox: "allow-scripts",
             title: "docs/progress-vis.html",
-            url: "/api/v1/threads/thr_1/worktree/files/docs/progress-vis.html",
+            url: "/api/v1/file-previews/lease_1/docs/progress-vis.html",
           }}
         />,
       );
@@ -671,7 +671,7 @@ describe("FilePreview", () => {
       );
 
       expect(openExternalUrl).toHaveBeenCalledWith(
-        `${window.location.origin}/api/v1/threads/thr_1/worktree/files/docs/progress-vis.html`,
+        `${window.location.origin}/api/v1/file-previews/lease_1/docs/progress-vis.html`,
       );
     } finally {
       delete (window as unknown as { bbDesktop?: unknown }).bbDesktop;

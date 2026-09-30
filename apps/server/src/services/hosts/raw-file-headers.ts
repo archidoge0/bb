@@ -1,4 +1,3 @@
-import path from "node:path";
 import { ApiError } from "../../errors.js";
 
 const HTML_MIME_TYPE = "text/html";
@@ -11,7 +10,7 @@ interface RawFileMetadata {
   sizeBytes: number;
 }
 
-export function isHtmlMimeType(value: string | null | undefined): boolean {
+function isHtmlMimeType(value: string | null | undefined): boolean {
   return value?.split(";")[0]?.trim().toLowerCase() === HTML_MIME_TYPE;
 }
 
@@ -32,10 +31,4 @@ export function createRawFileHeaders(file: RawFileMetadata): Headers {
   headers.set("content-security-policy", HTML_PREVIEW_CSP);
   headers.set("content-type", HTML_PREVIEW_CONTENT_TYPE);
   return headers;
-}
-
-export function hostPathRoot(filePath: string): string {
-  return path.win32.isAbsolute(filePath) && !path.posix.isAbsolute(filePath)
-    ? path.win32.parse(filePath).root
-    : "/";
 }

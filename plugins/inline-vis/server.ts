@@ -129,6 +129,7 @@ export const inlineVisRpcContract = defineRpcContract({
           file: z.string(),
           source: z.enum(["workspace", "thread-storage"]),
           target: previewTargetSchema,
+          url: z.string(),
         })
         .strict(),
       z
@@ -218,9 +219,17 @@ export default async function plugin(bb: BbPluginApi) {
       }
 
       const kind = previewKind(file);
-      return kind === "markdown"
-        ? { kind, file, source, target, rootPath, content: result.content }
-        : { kind, file, source, target };
+      if (kind === "markdown") {
+        return { kind, file, source, target, rootPath, content: result.content };
+      }
+      const lease = await bb.sdk.files.createPreview({ hostId, rootPath });
+      return {
+        kind,
+        file,
+        source,
+        target,
+        url: `${lease.baseUrl}/${file.split("/").map(encodeURIComponent).join("/")}`,
+      };
     },
   });
 }

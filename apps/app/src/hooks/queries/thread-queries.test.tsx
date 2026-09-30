@@ -52,7 +52,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
   return {
     ...actual,
-    getThreadHostFilePreview: vi.fn(),
+    loadFilePreview: vi.fn(),
   };
 });
 
@@ -67,6 +67,7 @@ vi.mock("@/lib/sdk", () => ({
       storageLocation: vi.fn(),
       timeline: vi.fn(),
     },
+    files: { createPreview: vi.fn() },
   },
 }));
 
@@ -154,10 +155,14 @@ beforeEach(() => {
       },
     }),
   );
-  vi.mocked(api.getThreadHostFilePreview).mockResolvedValue({
+  vi.mocked(sdk.files.createPreview).mockResolvedValue({
+    baseUrl: "/api/v1/file-previews/lease-host",
+    expiresAtMs: Date.now() + 60_000,
+  });
+  vi.mocked(api.loadFilePreview).mockResolvedValue({
     kind: "text",
     path: "/tmp/log.txt",
-    url: "/api/v1/threads/thread-1/host-files/content?path=%2Ftmp%2Flog.txt",
+    url: "/api/v1/file-previews/lease-host/tmp/log.txt",
     mimeType: "text/plain",
     content: "preview",
   });
@@ -561,7 +566,15 @@ describe("useThreadHostFilePreview", () => {
     );
 
     await waitFor(() => {
-      expect(api.getThreadHostFilePreview).toHaveBeenCalledTimes(1);
+      expect(api.loadFilePreview).toHaveBeenCalledTimes(1);
+    });
+    expect(sdk.files.createPreview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: { kind: "thread-host", threadId: "thread-1" },
+      }),
+    );
+    expect(vi.mocked(api.loadFilePreview).mock.calls[0]?.[0]).toMatchObject({
+      url: "/api/v1/file-previews/lease-host/tmp/log.txt",
     });
 
     const query = queryClient.getQueryCache().find({

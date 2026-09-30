@@ -9,7 +9,6 @@ import type {
   ProjectBranchesResponse,
   ProjectBranchesQuery,
   ProjectCommandsQuery,
-  ProjectFileContentQuery,
   ProjectFilesQuery,
   ProjectResponse,
   ProjectWithThreadsResponse,
@@ -82,11 +81,11 @@ export type ProjectCommandsArgs = ProjectWorkspaceRoutingArgs &
     signal?: AbortSignal;
   };
 
-export type ProjectFileContentArgs = ProjectWorkspaceRoutingArgs &
-  Omit<ProjectFileContentQuery, "environmentId" | "hostId"> & {
-    projectId: string;
-    signal?: AbortSignal;
-  };
+export type ProjectFileContentArgs = ProjectWorkspaceRoutingArgs & {
+  path: string;
+  projectId: string;
+  signal?: AbortSignal;
+};
 
 export interface ProjectBranchesArgs extends ProjectBranchesQuery {
   projectId: string;
@@ -322,6 +321,18 @@ function resolveAttachmentFilename(input: ProjectAttachmentUploadArgs): string {
   return filename;
 }
 
+function isUtf8FileContent(bytes: Uint8Array, mimeType: string): boolean {
+  if (mimeType.startsWith("image/") && !mimeType.startsWith("image/svg+xml")) {
+    return false;
+  }
+  try {
+    new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 const BASE64_ALPHABET =
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
@@ -477,31 +488,35 @@ export function createProjectsArea(args: CreateSdkAreaArgs): ProjectsArea {
       );
     },
     async fileContent(input) {
-      const { projectId, signal, ...query } = input;
-      const response = await transport.resolve(
-        transport.api.v1.projects[":id"].files.content.$get(
-          {
-            param: { id: projectId },
-            query,
-          },
+      const { projectId, path, signal, ...routing } = input;
+      const lease = await transport.readJson(
+        transport.api.v1.files.previews.$post(
+          { json: { source: { kind: "project", projectId, ...routing } } },
           ...signalRequestArgs(signal),
         ),
       );
+      const response = await transport.resolve(
+        transport.fetch(
+          `${transport.baseUrl.replace(/\/+$/u, "")}${lease.baseUrl}/${path
+            .split("/")
+            .map(encodeURIComponent)
+            .join("/")}`,
+          signal === undefined ? undefined : { signal },
+        ),
+      );
       const bytes = new Uint8Array(await response.arrayBuffer());
-      const contentEncoding = response.headers.get("x-bb-content-encoding");
-      if (contentEncoding !== "utf8" && contentEncoding !== "base64") {
-        throw new Error(
-          "Project file response is missing its content encoding",
-        );
-      }
+      const mimeType =
+        response.headers.get("content-type") ?? "application/octet-stream";
+      const contentEncoding = isUtf8FileContent(bytes, mimeType)
+        ? "utf8"
+        : "base64";
       return {
         content:
           contentEncoding === "utf8"
             ? new TextDecoder().decode(bytes)
             : encodeBase64(bytes),
         contentEncoding,
-        mimeType:
-          response.headers.get("content-type") ?? "application/octet-stream",
+        mimeType,
         sizeBytes: bytes.byteLength,
       };
     },

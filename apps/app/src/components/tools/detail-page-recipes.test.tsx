@@ -575,7 +575,7 @@ describe("Skill detail recipe", () => {
     const markdownLinkRouting = buildMarkdownFileImageRouting({
       path: "/skills/writing-voice/SKILL.md",
       rootPath: "/skills/writing-voice",
-      threadId: null,
+      hostFileBaseUrl: null,
       resolveRelativeSrc: (path) => `/skill-preview/${path}`,
     });
     render(

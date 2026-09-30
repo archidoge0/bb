@@ -1,5 +1,6 @@
 import type {
   CreateFilePreviewResponse,
+  FilePreviewSource,
   HostFileListResponse,
   HostFileReadResponse,
   HostFileWriteResponse,
@@ -64,12 +65,13 @@ export interface FileRemoveArgs {
   recursive?: boolean;
 }
 
-export interface FilePreviewArgs {
-  hostId?: string;
-  rootPath: string;
+export type FilePreviewArgs = (
+  | { hostId?: string; rootPath: string; source?: never }
+  | { hostId?: never; rootPath?: never; source: FilePreviewSource }
+) & {
   signal?: AbortSignal;
   ttlMs?: number;
-}
+};
 
 export type FileReadResult = HostFileReadResponse;
 export type FileWriteResult = HostFileWriteResponse;
@@ -165,16 +167,11 @@ export function createFilesArea(args: CreateSdkAreaArgs): FilesArea {
       );
     },
     async createPreview(input) {
+      const { signal, ...json } = input;
       return transport.readJson(
         transport.api.v1.files.previews.$post(
-          {
-            json: {
-              hostId: input.hostId,
-              rootPath: input.rootPath,
-              ttlMs: input.ttlMs,
-            },
-          },
-          ...signalRequestArgs(input.signal),
+          { json },
+          ...signalRequestArgs(signal),
         ),
       );
     },

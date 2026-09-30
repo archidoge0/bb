@@ -16,42 +16,32 @@ describe("resolvePdfReadTarget", () => {
     {
       source: { kind: "workspace" as const, ...ids },
       path: "docs/a report.pdf",
-      expected: "/api/v1/threads/thr_1/worktree/files/docs/a%20report.pdf",
-      kind: "raw",
+      expected: {
+        relativePath: "docs/a report.pdf",
+        source: { kind: "environment", environmentId: "env_1" },
+      },
     },
     {
       source: { kind: "host" as const, ...ids },
       path: "/tmp/a report.pdf",
-      expected:
-        "/api/v1/threads/thr_1/host-files/content?path=%2Ftmp%2Fa+report.pdf",
-      kind: "raw",
+      expected: {
+        relativePath: "tmp/a report.pdf",
+        source: { kind: "thread-host", threadId: "thr_1" },
+      },
     },
     {
       source: { kind: "thread-storage" as const, ...ids },
       path: "exports/a report.pdf",
-      expected:
-        "/api/v1/threads/thr_1/thread-storage/files/exports/a%20report.pdf",
-      kind: "raw",
+      expected: {
+        relativePath: "exports/a report.pdf",
+        source: { kind: "thread-storage", threadId: "thr_1" },
+      },
     },
-  ])("uses the raw $source.kind route", ({ source, path, expected, kind }) => {
-    expect(resolvePdfReadTarget(path, source)).toEqual({ kind, url: expected });
+  ])("leases the $source.kind source", ({ source, path, expected }) => {
+    expect(resolvePdfReadTarget(path, source)).toEqual(expected);
   });
 
-  it("uses the workspace JSON route when no thread owns the environment", () => {
-    expect(
-      resolvePdfReadTarget("docs/handbook.pdf", {
-        kind: "workspace",
-        threadId: null,
-        environmentId: "env_1",
-        projectId: null,
-      }),
-    ).toEqual({
-      kind: "workspace-json",
-      url: "/api/v1/environments/env_1/diff/file?target=uncommitted&path=docs%2Fhandbook.pdf&side=new",
-    });
-  });
-
-  it("uses the project content route for a project-backed compose preview", () => {
+  it("leases the project source for a project-backed compose preview", () => {
     expect(
       resolvePdfReadTarget("docs/handbook.pdf", {
         kind: "workspace",
@@ -61,33 +51,40 @@ describe("resolvePdfReadTarget", () => {
         experimental_hostId: "host_remote",
       }),
     ).toEqual({
-      kind: "raw",
-      url: "/api/v1/projects/proj_1/files/content?path=docs%2Fhandbook.pdf&hostId=host_remote",
+      relativePath: "docs/handbook.pdf",
+      source: { kind: "project", projectId: "proj_1", hostId: "host_remote" },
     });
   });
 });
 
 describe("loadPdfBlob", () => {
-  it("decodes the environment JSON route into a PDF-typed blob", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            content: "JVBERg==",
-            contentEncoding: "base64",
-            mimeType: "application/pdf",
-          }),
-          { headers: { "content-type": "application/json" } },
-        ),
-      ),
-    );
+  it("reads the PDF through a lease for its source", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({ baseUrl: "/api/v1/file-previews/lease_1" }),
+      )
+      .mockResolvedValueOnce(
+        new Response(new Uint8Array([37, 80, 68, 70]), {
+          headers: { "content-type": "application/pdf" },
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
 
     const blob = await loadPdfBlob(
-      { kind: "workspace-json", url: "/environment-file" },
+      {
+        relativePath: "docs/a report.pdf",
+        source: { kind: "environment", environmentId: "env_1" },
+      },
       new AbortController().signal,
     );
 
+    expect(JSON.parse(fetchMock.mock.calls[0]?.[1].body)).toEqual({
+      source: { kind: "environment", environmentId: "env_1" },
+    });
+    expect(fetchMock.mock.calls[1]?.[0]).toBe(
+      "/api/v1/file-previews/lease_1/docs/a%20report.pdf",
+    );
     expect(blob.type).toBe("application/pdf");
     expect(new Uint8Array(await blob.arrayBuffer())).toEqual(
       new Uint8Array([37, 80, 68, 70]),

@@ -1,0 +1,504 @@
+import type { HostDaemonOnlineRpcRequestMessage } from "@bb/host-daemon-contract";
+import { describe, expect, it } from "vitest";
+import { registerHostRpcResponder } from "../helpers/host-rpc.js";
+import { readJson } from "../helpers/json.js";
+import {
+  seedEnvironment,
+  seedHostSession,
+  seedPrimaryHost,
+  seedProjectWithSource,
+  seedThread,
+  seedThreadFixture,
+} from "../helpers/seed.js";
+import {
+  withTestHarness,
+  type TestAppHarness as TestHarness,
+} from "../helpers/test-app.js";
+
+type HostCommand = HostDaemonOnlineRpcRequestMessage["command"];
+
+interface HostFile {
+  bytes: Buffer;
+  mimeType: string;
+}
+
+const REVISION = "0".repeat(64);
+
+function postJson(path: string, body: unknown): [string, RequestInit] {
+  return [
+    path,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  ];
+}
+
+async function mintLease(harness: TestHarness, body: unknown): Promise<string> {
+  const response = await harness.app.request(
+    ...postJson("/api/v1/files/previews", body),
+  );
+  expect(response.status).toBe(200);
+  const lease = await readJson(response);
+  if (
+    typeof lease !== "object" ||
+    lease === null ||
+    !("baseUrl" in lease) ||
+    typeof lease.baseUrl !== "string"
+  ) {
+    throw new Error("Preview response missing baseUrl");
+  }
+  return lease.baseUrl;
+}
+
+function serveFiles(
+  harness: TestHarness,
+  args: {
+    hostId: string;
+    sessionId: string;
+    files: Map<string, HostFile>;
+  },
+): HostCommand[] {
+  const commands: HostCommand[] = [];
+  registerHostRpcResponder(harness, {
+    hostId: args.hostId,
+    sessionId: args.sessionId,
+    handle: ({ command }) => {
+      commands.push(command);
+      if (command.type !== "host.read_file_chunk") {
+        throw new Error(`Unexpected command ${command.type}`);
+      }
+      const file = args.files.get(command.path);
+      if (!file) {
+        return {
+          ok: false,
+          errorCode: "ENOENT",
+          errorMessage: `Path does not exist: ${command.path}`,
+        };
+      }
+      return {
+        ok: true,
+        result: {
+          path: command.path,
+          content: file.bytes
+            .subarray(command.offset, command.offset + command.length)
+            .toString("base64"),
+          offset: command.offset,
+          mimeType: file.mimeType,
+          modifiedAtMs: 1234,
+          sizeBytes: file.bytes.length,
+          revision: REVISION,
+        },
+      };
+    },
+  });
+  return commands;
+}
+
+describe("file preview lease sources", () => {
+  it("streams thread storage through a source lease with ranges and sandboxed HTML", async () => {
+    await withTestHarness(async (harness) => {
+      const { host, session, thread } = seedThreadFixture(harness);
+      const storageRoot = `/tmp/bb-host-data/${host.id}/thread-storage/${thread.id}`;
+      const commands = serveFiles(harness, {
+        hostId: host.id,
+        sessionId: session.id,
+        files: new Map([
+          [
+            `${storageRoot}/clip.mp4`,
+            { bytes: Buffer.from([0, 1, 2, 3, 4, 5]), mimeType: "video/mp4" },
+          ],
+          [
+            `${storageRoot}/reports/preview v2.html`,
+            {
+              bytes: Buffer.from("<!doctype html><h1>Preview</h1>"),
+              mimeType: "text/html",
+            },
+          ],
+        ]),
+      });
+      const baseUrl = await mintLease(harness, {
+        source: { kind: "thread-storage", threadId: thread.id },
+      });
+
+      const clip = await harness.app.request(`${baseUrl}/clip.mp4`, {
+        headers: { Range: "bytes=0-1" },
+      });
+      expect(clip.status).toBe(206);
+      expect(clip.headers.get("content-range")).toBe("bytes 0-1/6");
+      expect(Buffer.from(await clip.arrayBuffer())).toEqual(
+        Buffer.from([0, 1]),
+      );
+
+      const html = await harness.app.request(
+        `${baseUrl}/reports/preview%20v2.html`,
+      );
+      expect(html.status).toBe(200);
+      expect(html.headers.get("content-type")).toBe("text/html; charset=utf-8");
+      expect(html.headers.get("content-security-policy")).toBe(
+        "sandbox allow-scripts",
+      );
+      expect(html.headers.get("cache-control")).toBe("no-store");
+      await expect(html.text()).resolves.toContain("<h1>Preview</h1>");
+
+      expect(
+        new Set(
+          commands.map((command) =>
+            command.type === "host.read_file_chunk" ? command.rootPath : null,
+          ),
+        ),
+      ).toEqual(new Set([storageRoot]));
+    });
+  });
+
+  it("reports file changes before streaming as retryable conflicts", async () => {
+    await withTestHarness(async (harness) => {
+      const { host, session, thread } = seedThreadFixture(harness);
+      registerHostRpcResponder(harness, {
+        hostId: host.id,
+        sessionId: session.id,
+        handle: ({ command }) => {
+          if (command.type !== "host.read_file_chunk") {
+            throw new Error("Unexpected command");
+          }
+          if (command.length !== 0) {
+            return {
+              ok: false,
+              errorCode: "file_changed",
+              errorMessage: "File changed",
+            };
+          }
+          return {
+            ok: true,
+            result: {
+              path: command.path,
+              content: "",
+              offset: 0,
+              sizeBytes: 30 * 1024 * 1024,
+              mimeType: "video/mp4",
+              modifiedAtMs: 1234,
+              revision: REVISION,
+            },
+          };
+        },
+      });
+      const baseUrl = await mintLease(harness, {
+        source: { kind: "thread-storage", threadId: thread.id },
+      });
+
+      const response = await harness.app.request(`${baseUrl}/clip.mp4`);
+
+      expect(response.status).toBe(409);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "file_changed",
+        retryable: true,
+      });
+    });
+  });
+
+  it("rejects oversized HTML from its metadata without reading content", async () => {
+    await withTestHarness(async (harness) => {
+      const { host, session, thread } = seedThreadFixture(harness);
+      const lengths: number[] = [];
+      registerHostRpcResponder(harness, {
+        hostId: host.id,
+        sessionId: session.id,
+        handle: ({ command }) => {
+          if (command.type !== "host.read_file_chunk") {
+            throw new Error("Unexpected command");
+          }
+          lengths.push(command.length);
+          return {
+            ok: true,
+            result: {
+              path: command.path,
+              content: "",
+              offset: 0,
+              sizeBytes: 5 * 1024 * 1024 + 1,
+              mimeType: "text/html",
+              modifiedAtMs: 1234,
+              revision: REVISION,
+            },
+          };
+        },
+      });
+      const baseUrl = await mintLease(harness, {
+        source: { kind: "thread-storage", threadId: thread.id },
+      });
+
+      const response = await harness.app.request(`${baseUrl}/large.html`);
+
+      expect(response.status).toBe(413);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "file_too_large",
+      });
+      expect(lengths).toEqual([0]);
+    });
+  });
+
+  it("leases thread host files at the filesystem root without a ready environment", async () => {
+    await withTestHarness(async (harness) => {
+      const { host, session, thread } = seedThreadFixture(harness, {
+        environment: { status: "provisioning" },
+      });
+      const commands = serveFiles(harness, {
+        hostId: host.id,
+        sessionId: session.id,
+        files: new Map([
+          [
+            "/Users/me/notes/plan.md",
+            { bytes: Buffer.from("# Plan\n"), mimeType: "text/markdown" },
+          ],
+        ]),
+      });
+      const baseUrl = await mintLease(harness, {
+        source: { kind: "thread-host", threadId: thread.id },
+      });
+
+      const response = await harness.app.request(
+        `${baseUrl}/Users/me/notes/plan.md`,
+      );
+
+      expect(response.status).toBe(200);
+      await expect(response.text()).resolves.toBe("# Plan\n");
+      expect(commands[0]).toMatchObject({
+        type: "host.read_file_chunk",
+        path: "/Users/me/notes/plan.md",
+        rootPath: "/",
+      });
+    });
+  });
+
+  it("refuses a thread host lease for a thread without an environment", async () => {
+    await withTestHarness(async (harness) => {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: null,
+      });
+
+      const response = await harness.app.request(
+        ...postJson("/api/v1/files/previews", {
+          source: { kind: "thread-host", threadId: thread.id },
+        }),
+      );
+
+      expect(response.status).toBe(409);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "thread_environment_unavailable",
+        details: { reason: "never_attached" },
+      });
+    });
+  });
+
+  it.each([
+    { errorCode: "invalid_path", expectedStatus: 400 },
+    { errorCode: "ENOENT", expectedStatus: 404 },
+  ])(
+    "maps daemon $errorCode failures on lease reads to $expectedStatus",
+    async ({ errorCode, expectedStatus }) => {
+      await withTestHarness(async (harness) => {
+        const { host, session, thread } = seedThreadFixture(harness);
+        registerHostRpcResponder(harness, {
+          hostId: host.id,
+          sessionId: session.id,
+          handle: () => ({
+            ok: false,
+            errorCode,
+            errorMessage: "Read failed",
+          }),
+        });
+        const baseUrl = await mintLease(harness, {
+          source: { kind: "thread-host", threadId: thread.id },
+        });
+
+        const response = await harness.app.request(`${baseUrl}/tmp/x.bin`);
+
+        expect(response.status).toBe(expectedStatus);
+        await expect(readJson(response)).resolves.toMatchObject({
+          code: errorCode,
+        });
+      });
+    },
+  );
+
+  it("reads working-tree files by chunk and git revisions in one read", async () => {
+    await withTestHarness(async (harness) => {
+      const { host, session, environment } = seedThreadFixture(harness, {
+        environment: { path: "/tmp/lease-env" },
+      });
+      const commands: HostCommand[] = [];
+      registerHostRpcResponder(harness, {
+        hostId: host.id,
+        sessionId: session.id,
+        handle: ({ command }) => {
+          commands.push(command);
+          if (command.type === "host.read_file") {
+            return {
+              ok: true,
+              result: {
+                path: command.path,
+                content: Buffer.from([0, 1, 2, 255]).toString("base64"),
+                contentEncoding: "base64",
+                mimeType: "application/octet-stream",
+                sizeBytes: 4,
+                sha256: "a".repeat(64),
+              },
+            };
+          }
+          if (command.type !== "host.read_file_chunk") {
+            throw new Error(`Unexpected command ${command.type}`);
+          }
+          const bytes = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0, 1, 2, 3]);
+          return {
+            ok: true,
+            result: {
+              path: command.path,
+              content: bytes
+                .subarray(command.offset, command.offset + command.length)
+                .toString("base64"),
+              offset: command.offset,
+              mimeType: "application/zip",
+              modifiedAtMs: 1234,
+              sizeBytes: bytes.length,
+              revision: REVISION,
+            },
+          };
+        },
+      });
+
+      const workingTree = await mintLease(harness, {
+        source: { kind: "environment", environmentId: environment.id },
+      });
+      const zip = await harness.app.request(`${workingTree}/dist/app.zip`, {
+        headers: { Range: "bytes=0-3" },
+      });
+      expect(zip.status).toBe(206);
+      expect(zip.headers.get("content-range")).toBe("bytes 0-3/8");
+      expect(commands.at(-1)).toMatchObject({
+        type: "host.read_file_chunk",
+        path: "/tmp/lease-env/dist/app.zip",
+        rootPath: "/tmp/lease-env",
+      });
+
+      const head = await mintLease(harness, {
+        source: {
+          kind: "environment",
+          environmentId: environment.id,
+          ref: "HEAD",
+        },
+      });
+      expect(head).not.toBe(workingTree);
+      const logo = await harness.app.request(`${head}/logo.bin`);
+      expect(logo.status).toBe(200);
+      expect(Buffer.from(await logo.arrayBuffer())).toEqual(
+        Buffer.from([0, 1, 2, 255]),
+      );
+      expect(commands.at(-1)).toEqual({
+        type: "host.read_file",
+        path: "/tmp/lease-env/logo.bin",
+        rootPath: "/tmp/lease-env",
+        ref: "HEAD",
+      });
+
+      const revalidated = await harness.app.request(`${head}/logo.bin`, {
+        headers: { "if-none-match": `"${"a".repeat(64)}"` },
+      });
+      expect(revalidated.status).toBe(304);
+    });
+  });
+
+  it("resolves project sources and rejects conflicting selectors", async () => {
+    await withTestHarness(async (harness) => {
+      const { host, session } = seedHostSession(harness.deps);
+      seedPrimaryHost(harness.deps, host.id);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/primary/project",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/primary/worktree",
+      });
+      const commands = serveFiles(harness, {
+        hostId: host.id,
+        sessionId: session.id,
+        files: new Map([
+          [
+            "/primary/project/qa/report.zip",
+            { bytes: Buffer.from([1, 2, 3]), mimeType: "application/zip" },
+          ],
+          [
+            "/primary/worktree/qa/report.zip",
+            { bytes: Buffer.from([4, 5, 6]), mimeType: "application/zip" },
+          ],
+        ]),
+      });
+
+      const primary = await mintLease(harness, {
+        source: { kind: "project", projectId: project.id },
+      });
+      const fromSource = await harness.app.request(`${primary}/qa/report.zip`);
+      expect(Buffer.from(await fromSource.arrayBuffer())).toEqual(
+        Buffer.from([1, 2, 3]),
+      );
+
+      const inEnvironment = await mintLease(harness, {
+        source: {
+          kind: "project",
+          projectId: project.id,
+          environmentId: environment.id,
+        },
+      });
+      const fromEnvironment = await harness.app.request(
+        `${inEnvironment}/qa/report.zip`,
+      );
+      expect(Buffer.from(await fromEnvironment.arrayBuffer())).toEqual(
+        Buffer.from([4, 5, 6]),
+      );
+      expect(
+        commands.map((command) =>
+          command.type === "host.read_file_chunk" ? command.rootPath : null,
+        ),
+      ).toEqual(
+        expect.arrayContaining(["/primary/project", "/primary/worktree"]),
+      );
+
+      const conflicting = await harness.app.request(
+        ...postJson("/api/v1/files/previews", {
+          source: {
+            kind: "project",
+            projectId: project.id,
+            environmentId: environment.id,
+            hostId: host.id,
+          },
+        }),
+      );
+      expect(conflicting.status).toBe(400);
+      await expect(readJson(conflicting)).resolves.toMatchObject({
+        message: expect.stringContaining("mutually exclusive"),
+      });
+    });
+  });
+
+  it("reuses one lease URL per resolved source", async () => {
+    await withTestHarness(async (harness) => {
+      const { thread } = seedThreadFixture(harness);
+      const storage = { kind: "thread-storage", threadId: thread.id };
+
+      const first = await mintLease(harness, { source: storage });
+      const second = await mintLease(harness, { source: storage });
+      const host = await mintLease(harness, {
+        source: { kind: "thread-host", threadId: thread.id },
+      });
+
+      expect(second).toBe(first);
+      expect(host).not.toBe(first);
+    });
+  });
+});

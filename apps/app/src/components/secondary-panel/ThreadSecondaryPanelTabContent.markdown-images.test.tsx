@@ -60,6 +60,13 @@ vi.mock("@/hooks/queries/thread-queries", () => ({
     previewQuery(path),
 }));
 
+vi.mock("@/hooks/queries/file-lease-queries", () => ({
+  useFileLeaseBaseUrl: (target: { source?: { kind: string } } | null) =>
+    target?.source ? `/api/v1/file-previews/lease_${target.source.kind}` : null,
+  useThreadHostFileBaseUrl: (threadId: string | null | undefined) =>
+    threadId ? "/api/v1/file-previews/lease_thread-host" : null,
+}));
+
 vi.mock("@/hooks/queries/host-file-preview-query", () => ({
   useHostFilePreview: (_hostId: string, path: string) =>
     previewQuery(path, "/api/v1/file-previews/lease_preview/readme.md"),
@@ -86,10 +93,10 @@ describe("secondary-panel Markdown image routing", () => {
     );
 
     expect(imageSrc("absolute")).toBe(
-      "/api/v1/threads/thr_preview/host-files/content?path=%2Fworkspace%2Fgenerated.png",
+      "/api/v1/file-previews/lease_thread-host/workspace/generated.png",
     );
     expect(imageSrc("relative")).toBe(
-      "/api/v1/threads/thr_preview/worktree/files/docs/images/chart.png",
+      "/api/v1/file-previews/lease_environment/docs/images/chart.png",
     );
     expect(imageSrc("escape")).toBe("../../outside.png");
   });
@@ -107,16 +114,16 @@ describe("secondary-panel Markdown image routing", () => {
       />,
     );
 
-    expect(imageSrc("absolute")).toContain(
-      "/api/v1/projects/proj_preview/files/content?",
+    expect(imageSrc("absolute")).toBe(
+      "/api/v1/file-previews/lease_project/generated.png",
     );
-    expect(imageSrc("absolute")).toContain("path=generated.png");
-    expect(imageSrc("relative")).toContain("path=docs%2Fimages%2Fchart.png");
-    expect(imageSrc("absolute")).toContain("hostId=host_preview");
+    expect(imageSrc("relative")).toBe(
+      "/api/v1/file-previews/lease_project/docs/images/chart.png",
+    );
     expect(imageSrc("escape")).toBe("../../outside.png");
   });
 
-  it("routes thread host-file images through the host content endpoint", () => {
+  it("routes thread host-file images through the thread host lease", () => {
     render(
       <HostFilePreviewTabContent
         activePath="/workspace/docs/readme.md"
@@ -129,10 +136,10 @@ describe("secondary-panel Markdown image routing", () => {
     );
 
     expect(imageSrc("absolute")).toBe(
-      "/api/v1/threads/thr_preview/host-files/content?path=%2Fworkspace%2Fgenerated.png",
+      "/api/v1/file-previews/lease_thread-host/workspace/generated.png",
     );
     expect(imageSrc("relative")).toBe(
-      "/api/v1/threads/thr_preview/host-files/content?path=%2Fworkspace%2Fdocs%2Fimages%2Fchart.png",
+      "/api/v1/file-previews/lease_thread-host/workspace/docs/images/chart.png",
     );
     expect(imageSrc("escape")).toBe("../../outside.png");
   });
@@ -165,10 +172,10 @@ describe("secondary-panel Markdown image routing", () => {
     );
 
     expect(imageSrc("absolute")).toBe(
-      "/api/v1/threads/thr_preview/host-files/content?path=%2Fworkspace%2Fgenerated.png",
+      "/api/v1/file-previews/lease_thread-host/workspace/generated.png",
     );
     expect(imageSrc("relative")).toBe(
-      "/api/v1/threads/thr_preview/thread-storage/files/docs/images/chart.png",
+      "/api/v1/file-previews/lease_thread-storage/docs/images/chart.png",
     );
     expect(imageSrc("escape")).toBe("../../outside.png");
   });

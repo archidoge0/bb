@@ -108,6 +108,10 @@ describe("GitDiffTabContent panel gating", () => {
 
 describe("WorkspaceFilePreviewTabContent panel gating", () => {
   it("does not refetch an invalidated preview while the panel is closed", async () => {
+    vi.mocked(sdk.files.createPreview).mockResolvedValue({
+      baseUrl: "/api/v1/file-previews/lease-env",
+      expiresAtMs: Date.now() + 60_000,
+    });
     const { queryClient, wrapper: Wrapper } = createQueryClientTestHarness();
     const renderTab = (isPanelOpen: boolean) => (
       <Wrapper>

@@ -17,12 +17,16 @@ import {
 } from "@/hooks/queries/thread-queries";
 import { useHostFilePreview } from "@/hooks/queries/host-file-preview-query";
 import {
-  buildProjectFileContentUrl,
-  buildThreadRawFileUrl,
-  buildThreadHostFileContentUrl,
-  buildThreadStorageRawContentUrl,
-  buildThreadWorktreeRawContentUrl,
-} from "@/lib/file-content-urls";
+  useFileLeaseBaseUrl,
+  useThreadHostFileBaseUrl,
+} from "@/hooks/queries/file-lease-queries";
+import { buildFilePreviewLeaseContentUrl } from "@/lib/file-content-urls";
+import {
+  environmentFileLeaseTarget,
+  hostRootRelativePath,
+  projectFileLeaseTarget,
+  threadStorageFileLeaseTarget,
+} from "@/lib/file-lease";
 import type {
   EnvironmentFilePreviewSource,
   FilePreview,
@@ -341,40 +345,30 @@ export function WorkspaceFilePreviewTabContent({
     { enabled: isPanelOpen },
   );
   const environmentRootPath = environmentQuery.data?.path ?? null;
-  const environmentProjectId = environmentQuery.data?.projectId;
+  const environmentFileBaseUrl = useFileLeaseBaseUrl(
+    environmentId && source
+      ? environmentFileLeaseTarget(environmentId, source)
+      : null,
+  );
+  const hostFileBaseUrl = useThreadHostFileBaseUrl(threadId);
   const resolvedMarkdownLinkRouting = useMemo(() => {
-    if (
-      source === null ||
-      environmentId === null ||
-      environmentId === undefined ||
-      (!threadId && environmentProjectId === undefined)
-    ) {
+    if (environmentFileBaseUrl === null) {
       return markdownLinkRouting;
     }
     return buildMarkdownFileImageRouting({
       path: activePath,
       rootPath: environmentRootPath,
-      threadId: threadId ?? null,
+      hostFileBaseUrl,
       linkRouting: markdownLinkRouting,
-      resolveRelativeSrc: (path) => {
-        if (threadId && source.kind === "working-tree") {
-          return buildThreadWorktreeRawContentUrl(threadId, path);
-        }
-        return environmentProjectId === undefined
-          ? path
-          : buildProjectFileContentUrl(environmentProjectId, path, {
-              environmentId,
-            });
-      },
+      resolveRelativeSrc: (path) =>
+        buildFilePreviewLeaseContentUrl(environmentFileBaseUrl, path),
     });
   }, [
     activePath,
-    environmentId,
-    environmentProjectId,
+    environmentFileBaseUrl,
     environmentRootPath,
+    hostFileBaseUrl,
     markdownLinkRouting,
-    source,
-    threadId,
   ]);
 
   return (
@@ -383,8 +377,8 @@ export function WorkspaceFilePreviewTabContent({
       activePath={activePath}
       copyPath={copyPath}
       htmlPreviewUrl={
-        threadId && source?.kind === "working-tree"
-          ? buildThreadWorktreeRawContentUrl(threadId, activePath)
+        environmentFileBaseUrl !== null && source?.kind === "working-tree"
+          ? buildFilePreviewLeaseContentUrl(environmentFileBaseUrl, activePath)
           : null
       }
       lineRange={lineRange}
@@ -416,29 +410,28 @@ export function ProjectFilePreviewTabContent({
     { environmentId, hostId },
     { enabled: isPanelOpen },
   );
+  const projectFileBaseUrl = useFileLeaseBaseUrl(
+    projectFileLeaseTarget(projectId, { environmentId, hostId }),
+  );
+  const hostFileBaseUrl = useThreadHostFileBaseUrl(threadId);
   const resolvedMarkdownLinkRouting = useMemo(() => {
+    if (projectFileBaseUrl === null) {
+      return markdownLinkRouting;
+    }
     return buildMarkdownFileImageRouting({
       path: activePath,
       rootPath,
-      threadId,
+      hostFileBaseUrl,
       linkRouting: markdownLinkRouting,
       resolveRelativeSrc: (path) =>
-        buildProjectFileContentUrl(projectId, path, {
-          ...(environmentId !== null
-            ? { environmentId }
-            : hostId !== null
-              ? { hostId }
-              : {}),
-        }),
+        buildFilePreviewLeaseContentUrl(projectFileBaseUrl, path),
     });
   }, [
     activePath,
-    environmentId,
-    hostId,
+    hostFileBaseUrl,
     markdownLinkRouting,
-    projectId,
+    projectFileBaseUrl,
     rootPath,
-    threadId,
   ]);
 
   return (
@@ -472,25 +465,39 @@ export function HostFilePreviewTabContent({
     activePath,
     { enabled: isPanelOpen },
   );
+  const hostFileBaseUrl = useThreadHostFileBaseUrl(threadId);
   const resolvedMarkdownLinkRouting = useMemo(() => {
+    if (hostFileBaseUrl === null) {
+      return markdownLinkRouting;
+    }
     return buildMarkdownFileImageRouting({
       path: activePath,
       rootPath:
         markdownLinkRouting?.localFile?.relativeLinks?.rootPath ??
         getAbsoluteDirname({ path: activePath }),
-      threadId,
+      hostFileBaseUrl,
       linkRouting: markdownLinkRouting,
       resolveRelativeSrc: (_relativePath, path) =>
-        buildThreadHostFileContentUrl(threadId, path),
+        buildFilePreviewLeaseContentUrl(
+          hostFileBaseUrl,
+          hostRootRelativePath(path),
+        ),
     });
-  }, [activePath, markdownLinkRouting, threadId]);
+  }, [activePath, hostFileBaseUrl, markdownLinkRouting]);
 
   return (
     <SecondaryPanelFilePreview
       {...filePreviewQueryProps(hostFilePreviewQuery)}
       activePath={activePath}
       copyPath={copyPath}
-      htmlPreviewUrl={buildThreadRawFileUrl(threadId, activePath)}
+      htmlPreviewUrl={
+        hostFileBaseUrl === null
+          ? null
+          : buildFilePreviewLeaseContentUrl(
+              hostFileBaseUrl,
+              hostRootRelativePath(activePath),
+            )
+      }
       lineRange={lineRange}
       markdownLinkRouting={resolvedMarkdownLinkRouting}
       onSelectionAddToChat={onSelectionAddToChat}
@@ -547,23 +554,34 @@ export function ThreadStorageFilePreviewTabContent({
     activePath,
     { enabled: isPanelOpen },
   );
+  const storageFileBaseUrl = useFileLeaseBaseUrl(
+    threadStorageFileLeaseTarget(threadId),
+  );
+  const hostFileBaseUrl = useThreadHostFileBaseUrl(threadId);
   const resolvedMarkdownLinkRouting = useMemo(() => {
+    if (storageFileBaseUrl === null) {
+      return markdownLinkRouting;
+    }
     return buildMarkdownFileImageRouting({
       path: activePath,
       rootPath: null,
-      threadId,
+      hostFileBaseUrl,
       linkRouting: markdownLinkRouting,
       resolveRelativeSrc: (path) =>
-        buildThreadStorageRawContentUrl(threadId, path),
+        buildFilePreviewLeaseContentUrl(storageFileBaseUrl, path),
     });
-  }, [activePath, markdownLinkRouting, threadId]);
+  }, [activePath, hostFileBaseUrl, markdownLinkRouting, storageFileBaseUrl]);
 
   return (
     <SecondaryPanelFilePreview
       {...filePreviewQueryProps(threadStorageFilePreviewQuery)}
       activePath={activePath}
       copyPath={copyPath}
-      htmlPreviewUrl={buildThreadStorageRawContentUrl(threadId, activePath)}
+      htmlPreviewUrl={
+        storageFileBaseUrl === null
+          ? null
+          : buildFilePreviewLeaseContentUrl(storageFileBaseUrl, activePath)
+      }
       lineRange={lineRange}
       markdownLinkRouting={resolvedMarkdownLinkRouting}
       onSelectionAddToChat={onSelectionAddToChat}

@@ -37,11 +37,15 @@ describe("PDF file opener", () => {
   });
 
   it("loads a storage PDF once into a revoked object URL and leaves the viewer unsandboxed", async () => {
-    vi.mocked(fetch).mockResolvedValue(
-      new Response(new Uint8Array([37, 80, 68, 70]), {
-        headers: { "content-type": "application/pdf" },
-      }),
-    );
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        Response.json({ baseUrl: "/api/v1/file-previews/lease_1" }),
+      )
+      .mockResolvedValueOnce(
+        new Response(new Uint8Array([37, 80, 68, 70]), {
+          headers: { "content-type": "application/pdf" },
+        }),
+      );
     const slot = renderSlot(app.fileOpeners[0]!, {
       path: "reports/quarter one.pdf",
       source,
@@ -55,7 +59,7 @@ describe("PDF file opener", () => {
     });
 
     expect(fetch).toHaveBeenCalledWith(
-      "/api/v1/threads/thr_1/thread-storage/files/reports/quarter%20one.pdf",
+      "/api/v1/file-previews/lease_1/reports/quarter%20one.pdf",
       expect.objectContaining({ credentials: "same-origin" }),
     );
     expect(frame.getAttribute("src")).toBe("blob:pdf-preview");
@@ -74,11 +78,15 @@ describe("PDF file opener", () => {
   });
 
   it("rejects a non-PDF response before creating an unsandboxed frame", async () => {
-    vi.mocked(fetch).mockResolvedValue(
-      new Response("<script>parent.pwned = true</script>", {
-        headers: { "content-type": "text/html" },
-      }),
-    );
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        Response.json({ baseUrl: "/api/v1/file-previews/lease_1" }),
+      )
+      .mockResolvedValueOnce(
+        new Response("<script>parent.pwned = true</script>", {
+          headers: { "content-type": "text/html" },
+        }),
+      );
     const slot = renderSlot(app.fileOpeners[0]!, {
       path: "spoofed.pdf",
       source,

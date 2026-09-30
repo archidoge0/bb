@@ -35,6 +35,12 @@ import type { FilePreview } from "@bb/client-core";
 import type { PathListOptions } from "@/lib/path-list-options";
 import type { ThreadStorageFileListOptions } from "@/lib/thread-storage-files";
 import * as api from "@/lib/api";
+import {
+  hostRootRelativePath,
+  threadHostFileLeaseTarget,
+  threadStorageFileLeaseTarget,
+} from "@/lib/file-lease";
+import { fetchFileLeaseUrl } from "./file-lease-queries";
 import { sdk } from "@/lib/sdk";
 import {
   useThreadDetailRealtimeSubscription,
@@ -882,15 +888,25 @@ export function useThreadStorageFilePreview(
 ) {
   const enabled = (options?.enabled ?? true) && Boolean(id) && Boolean(path);
   useThreadDetailRealtimeSubscription(id, { enabled });
+  const queryClient = useQueryClient();
 
   return useQuery<FilePreview>({
     queryKey: threadStorageFilePreviewQueryKey(id, path),
-    queryFn: ({ signal }) =>
-      api.getThreadStorageFilePreview(
-        requireThreadId(id, "useThreadStorageFilePreview"),
-        path ?? "",
+    queryFn: async ({ signal }) => {
+      const threadId = requireThreadId(id, "useThreadStorageFilePreview");
+      const filePath = path ?? "";
+      return api.loadFilePreview(
+        {
+          path: filePath,
+          url: await fetchFileLeaseUrl(
+            queryClient,
+            threadStorageFileLeaseTarget(threadId),
+            filePath,
+          ),
+        },
         signal,
-      ),
+      );
+    },
     enabled,
     ...REALTIME_OWNED_MOUNT_BASELINE_QUERY_POLICY,
     ...HEAVY_PAYLOAD_QUERY_POLICY,
@@ -909,15 +925,26 @@ export function useThreadHostFilePreview(
     Boolean(environmentId) &&
     Boolean(path);
   useThreadDetailRealtimeSubscription(id, { enabled });
+  const queryClient = useQueryClient();
 
   return useQuery<FilePreview>({
     queryKey: threadHostFilePreviewQueryKey(id, environmentId, path),
-    queryFn: ({ signal }) =>
-      api.getThreadHostFilePreview(
-        requireThreadId(id, "useThreadHostFilePreview"),
-        path ?? "",
+    queryFn: async ({ signal }) => {
+      const threadId = requireThreadId(id, "useThreadHostFilePreview");
+      const filePath = path ?? "";
+      return api.loadFilePreview(
+        {
+          name: filePath.split("/").at(-1),
+          path: filePath,
+          url: await fetchFileLeaseUrl(
+            queryClient,
+            threadHostFileLeaseTarget(threadId),
+            hostRootRelativePath(filePath),
+          ),
+        },
         signal,
-      ),
+      );
+    },
     enabled,
     ...RESUME_REFETCH_QUERY_POLICY,
     ...HEAVY_PAYLOAD_QUERY_POLICY,

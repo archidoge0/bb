@@ -72,6 +72,7 @@ import {
 import type { ThreadTimelinePluginMessageAction } from "./types.js";
 import type { PromptDraftAttachment } from "@bb/client-core";
 import { buildMarkdownMessageLinkRouting } from "@/components/ui/markdown-message-link-routing";
+import { useTimelineHostFileBaseUrl } from "./ThreadHostFileLeaseContext";
 
 interface ConversationMessageContentBaseProps {
   attachments: TimelineConversationAttachments | null;
@@ -354,15 +355,16 @@ function UserConversationMessage({
   turnRequest,
   workspaceRootPath,
 }: UserConversationMessageProps) {
+  const hostFileBaseUrl = useTimelineHostFileBaseUrl(threadId);
   const linkRouting = useMemo(
     () =>
       buildMarkdownMessageLinkRouting({
+        hostFileBaseUrl,
         onOpenLink,
         onOpenLocalFileLink,
-        threadId,
         workspaceRootPath,
       }),
-    [onOpenLink, onOpenLocalFileLink, threadId, workspaceRootPath],
+    [hostFileBaseUrl, onOpenLink, onOpenLocalFileLink, workspaceRootPath],
   );
   const generatedSource =
     initiator === "agent" && senderThreadId !== null
@@ -497,15 +499,16 @@ function AssistantConversationMessage({
     const tail = streamingSplit?.tail ?? text;
     return streaming ? repairStreamingMarkdownTail(tail) : tail;
   }, [streaming, streamingSplit, text]);
+  const hostFileBaseUrl = useTimelineHostFileBaseUrl(threadId);
   const linkRouting = useMemo(
     () =>
       buildMarkdownMessageLinkRouting({
+        hostFileBaseUrl,
         onOpenLink,
         onOpenLocalFileLink,
-        threadId,
         workspaceRootPath,
       }),
-    [onOpenLink, onOpenLocalFileLink, threadId, workspaceRootPath],
+    [hostFileBaseUrl, onOpenLink, onOpenLocalFileLink, workspaceRootPath],
   );
 
   const messageDirectiveRegistry = useMessageDirectiveRegistry();

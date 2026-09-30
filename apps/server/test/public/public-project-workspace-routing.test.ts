@@ -12,42 +12,6 @@ import {
 } from "../helpers/seed.js";
 import { withTestHarness } from "../helpers/test-app.js";
 
-function respondWithFileChunks(
-  harness: Parameters<typeof registerHostRpcResponder>[0],
-  args: {
-    hostId: string;
-    sessionId: string;
-    files: Map<string, { bytes: Buffer; mimeType: string }>;
-    rootPaths: string[];
-  },
-): void {
-  registerHostRpcResponder(harness, {
-    hostId: args.hostId,
-    sessionId: args.sessionId,
-    handle: ({ command }) => {
-      if (command.type !== "host.read_file_chunk")
-        throw new Error(`Unexpected command ${command.type}`);
-      args.rootPaths.push(command.rootPath);
-      const file = args.files.get(command.path);
-      if (!file) throw new Error(`Unexpected path ${command.path}`);
-      return {
-        ok: true,
-        result: {
-          path: command.path,
-          content: file.bytes
-            .subarray(command.offset, command.offset + command.length)
-            .toString("base64"),
-          offset: command.offset,
-          mimeType: file.mimeType,
-          modifiedAtMs: 1234,
-          sizeBytes: file.bytes.length,
-          revision: "0".repeat(64),
-        },
-      };
-    },
-  });
-}
-
 const remoteCommand: HostProviderCommand = {
   name: "remote-only",
   source: "skill",
@@ -334,12 +298,6 @@ describe("public project workspace routing", () => {
       await expect(readJson(primaryCommands)).resolves.toMatchObject({
         commands: expect.arrayContaining([primaryCommand]),
       });
-      const primaryContent = await harness.app.request(
-        `/api/v1/projects/${project.id}/files/content?path=primary.txt`,
-      );
-      await expect(primaryContent.text()).resolves.toBe(
-        "content from /primary/project",
-      );
 
       const remotePaths = await harness.app.request(
         `/api/v1/projects/${project.id}/paths?hostId=${remoteHost.id}&includeFiles=true&includeDirectories=true`,
@@ -378,14 +336,6 @@ describe("public project workspace routing", () => {
           "codex",
         ),
       });
-
-      const content = await harness.app.request(
-        `/api/v1/projects/${project.id}/files/content?hostId=${remoteHost.id}&path=remote.txt`,
-      );
-      expect(content.headers.get("x-bb-content-encoding")).toBe("utf8");
-      await expect(content.text()).resolves.toBe(
-        "content from /remote/project",
-      );
     });
   });
 
@@ -407,7 +357,6 @@ describe("public project workspace routing", () => {
         `/api/v1/projects/${project.id}/files?${selector}`,
         `/api/v1/projects/${project.id}/paths?${selector}&includeFiles=true&includeDirectories=true`,
         `/api/v1/projects/${project.id}/commands?${selector}&provider=codex`,
-        `/api/v1/projects/${project.id}/files/content?${selector}&path=file.txt`,
       ];
 
       for (const url of urls) {
@@ -417,90 +366,6 @@ describe("public project workspace routing", () => {
           message: expect.stringContaining("mutually exclusive"),
         });
       }
-    });
-  });
-
-  it("preserves binary project file bytes and declares base64 SDK encoding", async () => {
-    await withTestHarness(async (harness) => {
-      const { host, session } = seedHostSession(harness.deps, {
-        id: "host-project-routing-binary",
-      });
-      seedPrimaryHost(harness.deps, host.id);
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-        path: "/binary/project",
-      });
-      registerHostRpcResponder(harness, {
-        hostId: host.id,
-        sessionId: session.id,
-        handle: (request) => {
-          if (request.command.type !== "host.read_file") {
-            throw new Error(`Unexpected binary RPC ${request.command.type}`);
-          }
-          return {
-            ok: true,
-            result: {
-              path: request.command.path,
-              content: "AAH+/w==",
-              contentEncoding: "base64",
-              mimeType: "application/octet-stream",
-              sizeBytes: 4,
-              sha256: "1".repeat(64),
-            },
-          };
-        },
-      });
-
-      const response = await harness.app.request(
-        `/api/v1/projects/${project.id}/files/content?path=image.bin`,
-      );
-      expect(response.status).toBe(200);
-      expect(response.headers.get("content-type")).toContain(
-        "application/octet-stream",
-      );
-      expect(response.headers.get("x-bb-content-encoding")).toBe("base64");
-      expect(new Uint8Array(await response.arrayBuffer())).toEqual(
-        new Uint8Array([0, 1, 254, 255]),
-      );
-    });
-  });
-
-  it("streams project files from files/raw within the selected source root", async () => {
-    await withTestHarness(async (harness) => {
-      const { host, session } = seedHostSession(harness.deps);
-      seedPrimaryHost(harness.deps, host.id);
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-        path: "/primary/project",
-      });
-      const rootPaths: string[] = [];
-      respondWithFileChunks(harness, {
-        hostId: host.id,
-        sessionId: session.id,
-        files: new Map([
-          [
-            "/primary/project/qa/report.zip",
-            {
-              bytes: Buffer.from([0x50, 0x4b, 0x03, 0x04, 0, 1, 2, 3]),
-              mimeType: "application/zip",
-            },
-          ],
-        ]),
-        rootPaths,
-      });
-
-      const response = await harness.app.request(
-        `/api/v1/projects/${project.id}/files/raw?path=qa/report.zip`,
-        { headers: { Range: "bytes=4-" } },
-      );
-
-      expect(response.status).toBe(206);
-      expect(response.headers.get("content-range")).toBe("bytes 4-7/8");
-      expect(response.headers.get("content-type")).toBe("application/zip");
-      expect(Buffer.from(await response.arrayBuffer())).toEqual(
-        Buffer.from([0, 1, 2, 3]),
-      );
-      expect(new Set(rootPaths)).toEqual(new Set(["/primary/project"]));
     });
   });
 });
