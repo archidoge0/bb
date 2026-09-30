@@ -8,7 +8,7 @@ import {
   buildFilePreviewLeaseContentUrl,
   getFilePreviewLeaseBaseUrl,
 } from "@/lib/file-content-urls";
-import { hostRootRelativePath } from "@/lib/file-lease";
+import { splitHostFilePath } from "@/lib/file-lease";
 
 const ROUTE_ROOT = "/__bb_markdown_file_root__";
 
@@ -50,7 +50,7 @@ export function buildMarkdownFileImageRouting({
         if (sourceKind === "absolute" && hostFileBaseUrl !== null) {
           return buildFilePreviewLeaseContentUrl(
             hostFileBaseUrl,
-            hostRootRelativePath(image.path),
+            splitHostFilePath(image.path).relativePath,
           );
         }
         return resolveRelativeSrc(
@@ -77,7 +77,10 @@ export function buildMarkdownLeaseImageRouting({
     path,
     rootPath,
     hostFileBaseUrl: null,
-    resolveRelativeSrc: (relativePath) =>
-      buildFilePreviewLeaseContentUrl(baseUrl, relativePath),
+    resolveRelativeSrc: (_relativePath, absolutePath) =>
+      buildFilePreviewLeaseContentUrl(
+        baseUrl,
+        splitHostFilePath(absolutePath).relativePath,
+      ),
   });
 }

@@ -26,7 +26,7 @@ import {
   type TimelineWorkRowFullOutputState,
 } from "./useTimelineWorkRowFullOutput.js";
 import { buildFilePreviewLeaseContentUrl } from "@/lib/file-content-urls";
-import { hostRootRelativePath } from "@/lib/file-lease";
+import { splitHostFilePath } from "@/lib/file-lease";
 import { useTimelineHostFileBaseUrl } from "./ThreadHostFileLeaseContext";
 import type { ThreadTimelineImageViewSrcResolver } from "./types.js";
 
@@ -85,7 +85,7 @@ function resolveImageViewSource({
     ? null
     : buildFilePreviewLeaseContentUrl(
         hostFileBaseUrl,
-        hostRootRelativePath(row.path),
+        splitHostFilePath(row.path).relativePath,
       );
 }
 

@@ -263,7 +263,11 @@ describe("preparePreview rpc", () => {
           };
         },
         createPreview: (args) => {
-          expect(args).toEqual({ hostId: HOST_ID, rootPath: ROOT });
+          expect(args).toEqual({
+            hostId: HOST_ID,
+            rootPath: ROOT,
+            ttlMs: 60 * 60 * 1000,
+          });
           return { baseUrl: "/api/v1/file-previews/lease_ws" };
         },
       },
@@ -312,7 +316,11 @@ describe("preparePreview rpc", () => {
           };
         },
         createPreview: (args) => {
-          expect(args).toEqual({ hostId: HOST_ID, rootPath: storageRootPath });
+          expect(args).toEqual({
+            hostId: HOST_ID,
+            rootPath: storageRootPath,
+            ttlMs: 60 * 60 * 1000,
+          });
           return { baseUrl: "/api/v1/file-previews/lease_ts" };
         },
       },

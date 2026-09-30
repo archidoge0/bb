@@ -27,6 +27,7 @@ const NULL_CHARACTER = "\u0000";
 
 export const FILE_PREVIEW_SAMPLE_BYTES = 64 * 1024;
 export const FILE_PREVIEW_TEXT_MAX_BYTES = 25 * 1024 * 1024;
+export const FILE_PREVIEW_HTML_MAX_BYTES = 5 * 1024 * 1024;
 
 export interface FilePreviewTarget {
   name?: string;

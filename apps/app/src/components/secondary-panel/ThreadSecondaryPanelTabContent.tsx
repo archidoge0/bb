@@ -23,7 +23,7 @@ import {
 import { buildFilePreviewLeaseContentUrl } from "@/lib/file-content-urls";
 import {
   environmentFileLeaseTarget,
-  hostRootRelativePath,
+  splitHostFilePath,
   projectFileLeaseTarget,
   threadStorageFileLeaseTarget,
 } from "@/lib/file-lease";
@@ -480,7 +480,7 @@ export function HostFilePreviewTabContent({
       resolveRelativeSrc: (_relativePath, path) =>
         buildFilePreviewLeaseContentUrl(
           hostFileBaseUrl,
-          hostRootRelativePath(path),
+          splitHostFilePath(path).relativePath,
         ),
     });
   }, [activePath, hostFileBaseUrl, markdownLinkRouting]);
@@ -495,7 +495,7 @@ export function HostFilePreviewTabContent({
           ? null
           : buildFilePreviewLeaseContentUrl(
               hostFileBaseUrl,
-              hostRootRelativePath(activePath),
+              splitHostFilePath(activePath).relativePath,
             )
       }
       lineRange={lineRange}

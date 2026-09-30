@@ -36,7 +36,7 @@ import type { PathListOptions } from "@/lib/path-list-options";
 import type { ThreadStorageFileListOptions } from "@/lib/thread-storage-files";
 import * as api from "@/lib/api";
 import {
-  hostRootRelativePath,
+  splitHostFilePath,
   threadHostFileLeaseTarget,
   threadStorageFileLeaseTarget,
 } from "@/lib/file-lease";
@@ -939,7 +939,7 @@ export function useThreadHostFilePreview(
           url: await fetchFileLeaseUrl(
             queryClient,
             threadHostFileLeaseTarget(threadId),
-            hostRootRelativePath(filePath),
+            splitHostFilePath(filePath).relativePath,
           ),
         },
         signal,

@@ -658,10 +658,14 @@ describe("FilePreview", () => {
         <FilePreview
           path="docs/progress-vis.html"
           state={{
-            kind: "iframe",
-            sandbox: "allow-scripts",
-            title: "docs/progress-vis.html",
-            url: "/api/v1/file-previews/lease_1/docs/progress-vis.html",
+            kind: "html",
+            file: { name: "progress-vis.html", contents: "<h1>Progress</h1>" },
+            iframe: {
+              sandbox: "allow-scripts",
+              title: "docs/progress-vis.html",
+              url: "/api/v1/file-previews/lease_1/docs/progress-vis.html",
+            },
+            lineRange: null,
           }}
         />,
       );
@@ -1010,6 +1014,50 @@ describe("FilePreview", () => {
     );
 
     expect(screen.getByRole("alert").textContent).toBe("Failed to load file");
+  });
+
+  it("renders HTML over the preview render limit as source instead of an iframe", () => {
+    const content = `<html>${"a".repeat(5 * 1024 * 1024)}</html>`;
+    const view = render(
+      <SecondaryPanelFilePreview
+        activePath="reports/large.html"
+        filePreview={{
+          kind: "text",
+          content,
+          mimeType: "text/html",
+          path: "reports/large.html",
+          url: "/api/v1/file-previews/lease_1/reports/large.html",
+        }}
+        htmlPreviewUrl="/api/v1/file-previews/lease_1/reports/large.html"
+        isLoading={false}
+      />,
+    );
+
+    expect(view.container.querySelector("iframe")).toBeNull();
+  });
+
+  it("offers Download instead of rendering HTML too large to preview", () => {
+    const view = render(
+      <SecondaryPanelFilePreview
+        activePath="reports/huge.html"
+        filePreview={{
+          kind: "unsupported",
+          mimeType: "text/html",
+          path: "reports/huge.html",
+          reason: "too-large",
+          sizeBytes: 30 * 1024 * 1024,
+          url: "/api/v1/file-previews/lease_1/reports/huge.html",
+        }}
+        htmlPreviewUrl="/api/v1/file-previews/lease_1/reports/huge.html"
+        isLoading={false}
+      />,
+    );
+
+    expect(view.container.querySelector("iframe")).toBeNull();
+    expect(screen.getByText("This file is too large to preview.")).not.toBeNull();
+    expect(
+      screen.getByRole("link", { name: "Download" }).getAttribute("href"),
+    ).toBe("/api/v1/file-previews/lease_1/reports/huge.html");
   });
 
   it("links Download to the file's raw URL under its basename", () => {

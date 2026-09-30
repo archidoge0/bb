@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { act, cleanup, fireEvent, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 
 const app = await loadPluginApp(() => import("./app"));
@@ -8,6 +8,7 @@ const app = await loadPluginApp(() => import("./app"));
 afterEach(() => {
   cleanup();
   window.localStorage.clear();
+  vi.useRealTimers();
 });
 
 const message = {
@@ -227,6 +228,55 @@ describe("InlineVisDirective", () => {
         },
       },
     ]);
+  });
+
+  it("renews the preview lease while mounted so a later expand still loads", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const urls = [
+      "/api/v1/file-previews/lease_ws/demo.html",
+      "/api/v1/file-previews/lease_after_restart/demo.html",
+    ];
+    let calls = 0;
+    const slot = renderSlot(
+      app.messageDirectives[0]!,
+      {
+        attributes: { file: "demo.html" },
+        source: '::inline-vis{file="demo.html"}',
+        message,
+        openWorkspaceFile: null,
+      },
+      {
+        rpc: {
+          preparePreview: () => ({
+            kind: "html",
+            file: "demo.html",
+            source: "workspace",
+            target: {
+              kind: "workspace",
+              environmentId: "env_1",
+              path: "demo.html",
+            },
+            url: urls[Math.min(calls++, urls.length - 1)]!,
+          }),
+        },
+      },
+    );
+    await waitFor(() =>
+      expect(slot.container.querySelector("iframe")?.getAttribute("src")).toBe(
+        urls[0],
+      ),
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30 * 60 * 1000);
+    });
+
+    await waitFor(() =>
+      expect(slot.container.querySelector("iframe")?.getAttribute("src")).toBe(
+        urls[1],
+      ),
+    );
+    expect(calls).toBe(2);
   });
 
   it("uses an optional bounded height attribute", async () => {

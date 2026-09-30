@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { loadFilePreview } from "@/lib/api";
+import { splitHostFilePath } from "@/lib/file-lease";
 import { fetchFileLeaseUrl } from "./file-lease-queries";
 import type { FilePreview } from "@bb/client-core";
 import type { QueryOptions } from "./query-helpers";
@@ -39,23 +40,6 @@ const HOST_MEDIA_PREVIEW_TYPES = new Map<string, HostMediaPreviewType>([
   [".wmv", { kind: "video", mimeType: "video/x-ms-wmv" }],
 ]);
 
-function splitAbsoluteHostFilePath(path: string): {
-  name: string;
-  rootPath: string;
-} {
-  const lastSeparatorIndex = Math.max(
-    path.lastIndexOf("/"),
-    path.lastIndexOf("\\"),
-  );
-  const name = path.slice(lastSeparatorIndex + 1);
-  let rootPath = path.slice(0, lastSeparatorIndex);
-  if (lastSeparatorIndex === 0) rootPath = "/";
-  if (/^[A-Za-z]:$/u.test(rootPath)) {
-    rootPath = `${rootPath}${path[lastSeparatorIndex] ?? "\\"}`;
-  }
-  return { name, rootPath };
-}
-
 function getHostMediaPreviewType(name: string): HostMediaPreviewType | null {
   const extensionIndex = name.lastIndexOf(".");
   if (extensionIndex <= 0) return null;
@@ -81,11 +65,12 @@ export function useHostFilePreview(
       if (activeHostId === null || activePath === null) {
         throw new Error("Host file preview target is incomplete");
       }
-      const { name, rootPath } = splitAbsoluteHostFilePath(activePath);
+      const { relativePath, rootPath } = splitHostFilePath(activePath);
+      const name = relativePath.split("/").at(-1) ?? relativePath;
       const url = await fetchFileLeaseUrl(
         queryClient,
         { hostId: activeHostId, rootPath },
-        name,
+        relativePath,
       );
       signal.throwIfAborted();
       const mediaPreviewType = getHostMediaPreviewType(name);

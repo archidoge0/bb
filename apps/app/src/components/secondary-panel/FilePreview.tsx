@@ -86,7 +86,6 @@ export type FilePreviewState =
   | { kind: "unsupported"; file: UnsupportedFilePreviewFile }
   | { kind: "image"; url: string }
   | { kind: "video"; url: string }
-  | ({ kind: "iframe" } & IframeFilePreviewTarget)
   | {
       kind: "html";
       file: FilePreviewFile;
@@ -237,9 +236,6 @@ const FILE_PREVIEW_VIEW_MODE_BUTTON_CLASS =
   "h-5 rounded-sm px-2 text-muted-foreground max-md:pointer-coarse:h-9";
 
 function getFilePreviewExternalUrl(state: FilePreviewState): string | null {
-  if (state.kind === "iframe") {
-    return state.url;
-  }
   if (state.kind === "html") {
     return state.iframe.url;
   }
@@ -461,12 +457,7 @@ export function FilePreview({
   markdownLinkRouting,
   statusLabel = null,
 }: FilePreviewProps) {
-  const iframeTarget =
-    state.kind === "iframe"
-      ? state
-      : state.kind === "html"
-        ? state.iframe
-        : null;
+  const iframeTarget = state.kind === "html" ? state.iframe : null;
   const iframeKey = JSON.stringify([
     state.kind,
     iframeTarget?.url,
@@ -519,9 +510,7 @@ export function FilePreview({
     );
   }, [filePreviewLineRange, path, toggleKind]);
 
-  const usesIframeLayout =
-    state.kind === "iframe" ||
-    (state.kind === "html" && viewMode === "preview");
+  const usesIframeLayout = state.kind === "html" && viewMode === "preview";
   const bodyViewMode: FilePreviewViewMode =
     toggleKind === null ? "preview" : viewMode;
   const usesCodeLayout = usesCodeViewLayout(state, bodyViewMode);
@@ -624,9 +613,6 @@ function FilePreviewBody({
   }
   if (state.kind === "video") {
     return <FilePreviewVideo url={state.url} title={path} />;
-  }
-  if (state.kind === "iframe") {
-    return iframePreview;
   }
   if (state.kind === "html") {
     return (

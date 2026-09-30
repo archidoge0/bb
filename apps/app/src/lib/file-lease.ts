@@ -58,6 +58,15 @@ export function threadStorageFileLeaseTarget(
   return { source: { kind: "thread-storage", threadId } };
 }
 
-export function hostRootRelativePath(absolutePath: string): string {
-  return absolutePath.replace(/^\/+/u, "");
+export function splitHostFilePath(absolutePath: string): {
+  relativePath: string;
+  rootPath: string;
+} {
+  if (/^[A-Za-z]:[\\/]/u.test(absolutePath)) {
+    return {
+      relativePath: absolutePath.slice(3).replace(/\\/gu, "/"),
+      rootPath: `${absolutePath.slice(0, 2)}\\`,
+    };
+  }
+  return { relativePath: absolutePath.replace(/^\/+/u, ""), rootPath: "/" };
 }

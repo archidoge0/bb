@@ -8,7 +8,7 @@ import {
 } from "@/lib/absolute-file-path";
 import { buildFilePreviewLeaseContentUrl } from "@/lib/file-content-urls";
 import {
-  hostRootRelativePath,
+  splitHostFilePath,
   threadHostFileLeaseTarget,
   threadStorageFileLeaseTarget,
   type FileLeaseTarget,
@@ -86,7 +86,7 @@ export function buildMarkdownDocumentLinkRouting({
             buildFilePreviewLeaseContentUrl(
               documentFileBaseUrl,
               target.kind === "workspace"
-                ? hostRootRelativePath(absolutePath)
+                ? splitHostFilePath(absolutePath).relativePath
                 : rootRelativePath,
             ),
         });

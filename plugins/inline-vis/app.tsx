@@ -51,6 +51,7 @@ const DEFAULT_HEIGHT_PX = 224;
 const MIN_HEIGHT_PX = 120;
 const MAX_HEIGHT_PX = 1_200;
 const COLLAPSED_STORAGE_KEY = "bb.inline-vis.collapsed";
+const PREVIEW_LEASE_REFRESH_MS = 30 * 60 * 1000;
 
 function readCollapsedPreference(): boolean {
   try {
@@ -203,6 +204,37 @@ function InlineVisDirective({
       cancelled = true;
     };
   }, [fileAttr, heightError, message.threadId, rpc, sourceAttr]);
+
+  const htmlPreviewReady = state.status === "ready" && state.kind === "html";
+  useEffect(() => {
+    if (!htmlPreviewReady) return;
+    const timer = window.setInterval(() => {
+      void rpc
+        .call("preparePreview", {
+          threadId: message.threadId,
+          file: fileAttr,
+          ...(sourceAttr === undefined ? {} : { source: sourceAttr }),
+        })
+        .then((result) => {
+          setState((current) =>
+            current.status === "ready" &&
+            current.kind === "html" &&
+            result.kind === "html" &&
+            current.url !== result.url
+              ? { status: "ready", ...result }
+              : current,
+          );
+        })
+        .catch((error: unknown) => {
+          setState({
+            status: "error",
+            file: fileAttr,
+            message: error instanceof Error ? error.message : String(error),
+          });
+        });
+    }, PREVIEW_LEASE_REFRESH_MS);
+    return () => window.clearInterval(timer);
+  }, [fileAttr, htmlPreviewReady, message.threadId, rpc, sourceAttr]);
 
   if (state.status === "missing-file") {
     return (

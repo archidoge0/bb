@@ -5,7 +5,7 @@ import type {
 import type { MarkdownPreviewLinkHandler } from "./markdown-link.js";
 import type { MarkdownPreviewLocalFileLinkHandler } from "./markdown-local-file-link.js";
 import { buildFilePreviewLeaseContentUrl } from "@/lib/file-content-urls";
-import { hostRootRelativePath } from "@/lib/file-lease";
+import { splitHostFilePath } from "@/lib/file-lease";
 
 interface BuildMarkdownMessageLinkRoutingArgs {
   hostFileBaseUrl: string | null;
@@ -38,7 +38,7 @@ export function buildMarkdownMessageLinkRouting({
       resolveSrc: ({ path }) =>
         buildFilePreviewLeaseContentUrl(
           hostFileBaseUrl,
-          hostRootRelativePath(path),
+          splitHostFilePath(path).relativePath,
         ),
       ...(workspaceRootPath === undefined
         ? {}

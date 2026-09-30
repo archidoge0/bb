@@ -197,31 +197,17 @@ describe("file preview lease sources", () => {
     });
   });
 
-  it("rejects oversized HTML from its metadata without reading content", async () => {
+  it("serves HTML larger than the preview render limit as sandboxed bytes", async () => {
     await withTestHarness(async (harness) => {
       const { host, session, thread } = seedThreadFixture(harness);
-      const lengths: number[] = [];
-      registerHostRpcResponder(harness, {
+      const storageRoot = `/tmp/bb-host-data/${host.id}/thread-storage/${thread.id}`;
+      const html = Buffer.alloc(6 * 1024 * 1024, "a");
+      serveFiles(harness, {
         hostId: host.id,
         sessionId: session.id,
-        handle: ({ command }) => {
-          if (command.type !== "host.read_file_chunk") {
-            throw new Error("Unexpected command");
-          }
-          lengths.push(command.length);
-          return {
-            ok: true,
-            result: {
-              path: command.path,
-              content: "",
-              offset: 0,
-              sizeBytes: 5 * 1024 * 1024 + 1,
-              mimeType: "text/html",
-              modifiedAtMs: 1234,
-              revision: REVISION,
-            },
-          };
-        },
+        files: new Map([
+          [`${storageRoot}/large.html`, { bytes: html, mimeType: "text/html" }],
+        ]),
       });
       const baseUrl = await mintLease(harness, {
         source: { kind: "thread-storage", threadId: thread.id },
@@ -229,11 +215,12 @@ describe("file preview lease sources", () => {
 
       const response = await harness.app.request(`${baseUrl}/large.html`);
 
-      expect(response.status).toBe(413);
-      await expect(readJson(response)).resolves.toMatchObject({
-        code: "file_too_large",
-      });
-      expect(lengths).toEqual([0]);
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-security-policy")).toBe(
+        "sandbox allow-scripts",
+      );
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      expect((await response.arrayBuffer()).byteLength).toBe(html.length);
     });
   });
 

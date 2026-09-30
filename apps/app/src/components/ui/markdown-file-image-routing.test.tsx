@@ -109,7 +109,8 @@ describe("Markdown file preview image routing", () => {
         markdownLinkRouting={buildMarkdownLeaseImageRouting({
           path: "references/guide.md",
           rootPath: "/skills/example",
-          previewUrl: "/api/v1/file-previews/lease_skill/SKILL.md",
+          previewUrl:
+            "/api/v1/file-previews/lease_skill/skills/example/SKILL.md",
         })}
         path="references/guide.md"
         state={{
@@ -126,7 +127,7 @@ describe("Markdown file preview image routing", () => {
     );
     for (const name of ["relative", "absolute"]) {
       expect(screen.getByRole("img", { name }).getAttribute("src")).toBe(
-        "/api/v1/file-previews/lease_skill/assets/chart.png",
+        "/api/v1/file-previews/lease_skill/skills/example/assets/chart.png",
       );
     }
     expect(

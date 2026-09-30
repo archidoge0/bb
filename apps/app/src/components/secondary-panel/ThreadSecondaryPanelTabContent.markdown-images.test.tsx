@@ -69,7 +69,10 @@ vi.mock("@/hooks/queries/file-lease-queries", () => ({
 
 vi.mock("@/hooks/queries/host-file-preview-query", () => ({
   useHostFilePreview: (_hostId: string, path: string) =>
-    previewQuery(path, "/api/v1/file-previews/lease_preview/readme.md"),
+    previewQuery(
+      path,
+      "/api/v1/file-previews/lease_preview/workspace/docs/readme.md",
+    ),
 }));
 
 afterEach(cleanup);
@@ -144,7 +147,7 @@ describe("secondary-panel Markdown image routing", () => {
     expect(imageSrc("escape")).toBe("../../outside.png");
   });
 
-  it("confines host-scoped relative images to the preview lease root", () => {
+  it("confines host-scoped relative images to the file's folder", () => {
     render(
       <HostScopedFilePreviewTabContent
         activePath="/workspace/docs/readme.md"
@@ -156,7 +159,7 @@ describe("secondary-panel Markdown image routing", () => {
 
     expect(imageSrc("absolute")).toBe("/workspace/generated.png");
     expect(imageSrc("relative")).toBe(
-      "/api/v1/file-previews/lease_preview/images/chart.png",
+      "/api/v1/file-previews/lease_preview/workspace/docs/images/chart.png",
     );
     expect(imageSrc("escape")).toBe("../../outside.png");
   });

@@ -7,6 +7,7 @@ import {
 import { z } from "zod";
 
 export const MAX_PREVIEW_BYTES = 5 * 1024 * 1024;
+export const PREVIEW_LEASE_TTL_MS = 60 * 60 * 1000;
 
 type PreviewKind = "html" | "markdown";
 
@@ -222,7 +223,11 @@ export default async function plugin(bb: BbPluginApi) {
       if (kind === "markdown") {
         return { kind, file, source, target, rootPath, content: result.content };
       }
-      const lease = await bb.sdk.files.createPreview({ hostId, rootPath });
+      const lease = await bb.sdk.files.createPreview({
+        hostId,
+        rootPath,
+        ttlMs: PREVIEW_LEASE_TTL_MS,
+      });
       return {
         kind,
         file,

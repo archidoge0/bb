@@ -53,13 +53,16 @@ describe("useHostFilePreview", () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     expect(filesSdk.createPreview).toHaveBeenCalledTimes(1);
+    expect(filesSdk.createPreview).toHaveBeenCalledWith(
+      expect.objectContaining({ hostId: "host-1", rootPath: "/" }),
+    );
     expect(filesSdk.read).not.toHaveBeenCalled();
     expect(result.current.data).toEqual({
       kind: "image",
       mimeType: "image/png",
       name: "diagram.png",
       path: "/tmp/diagram.png",
-      url: "/api/v1/file-previews/lease-1/diagram.png",
+      url: "/api/v1/file-previews/lease-1/tmp/diagram.png",
     });
     expect(
       queryClient.getQueryCache().find({
@@ -89,12 +92,12 @@ describe("useHostFilePreview", () => {
     expect(filesSdk.read).not.toHaveBeenCalled();
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0]?.[0]).toBe(
-      "/api/v1/file-previews/lease-2/report.html",
+      "/api/v1/file-previews/lease-2/tmp/report.html",
     );
     expect(result.current.data).toMatchObject({
       kind: "text",
       content: "<h1>Report</h1>",
-      url: "/api/v1/file-previews/lease-2/report.html",
+      url: "/api/v1/file-previews/lease-2/tmp/report.html",
     });
   });
 
