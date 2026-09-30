@@ -110,8 +110,8 @@ const messageDirectives = {
 };
 
 const linkRouting = buildMarkdownMessageLinkRouting({
-  hostFileBaseUrl: "/api/v1/file-previews/lease_stream",
   onOpenLocalFileLink: () => true,
+  threadId: "thr_stream",
   workspaceRootPath: "/workspace",
 });
 

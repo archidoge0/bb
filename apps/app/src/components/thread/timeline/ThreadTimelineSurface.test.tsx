@@ -3,7 +3,6 @@
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { BottomAnchorContext } from "@/components/ui/bottom-anchored-scroll-body.js";
-import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import { ThreadTimelineSurface } from "./ThreadTimelineSurface";
 
 vi.mock("@/hooks/queries/system-queries", () => ({
@@ -69,8 +68,7 @@ describe("ThreadTimelineSurface load-older control", () => {
         />
       </BottomAnchorContext.Provider>
     );
-    const { wrapper } = createQueryClientTestHarness();
-    const view = render(surface(null), { wrapper });
+    const view = render(surface(null));
 
     emitLatestSentinelIntersection();
     await waitFor(() => {

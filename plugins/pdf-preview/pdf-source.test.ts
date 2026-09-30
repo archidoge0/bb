@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { loadPdfBlob, resolvePdfReadTarget } from "./pdf-source.js";
+import { describe, expect, it } from "vitest";
+import { resolvePdfUrl } from "./pdf-source.js";
 
 const ids = {
   threadId: "thr_1",
@@ -7,87 +7,37 @@ const ids = {
   projectId: "proj_1",
 };
 
-afterEach(() => {
-  vi.unstubAllGlobals();
-});
-
-describe("resolvePdfReadTarget", () => {
+describe("resolvePdfUrl", () => {
   it.each([
     {
       source: { kind: "workspace" as const, ...ids },
       path: "docs/a report.pdf",
-      expected: {
-        relativePath: "docs/a report.pdf",
-        source: { kind: "environment", environmentId: "env_1" },
-      },
+      expected: "/api/v1/environments/env_1/files/docs/a%20report.pdf",
     },
     {
       source: { kind: "host" as const, ...ids },
       path: "/tmp/a report.pdf",
-      expected: {
-        relativePath: "tmp/a report.pdf",
-        source: { kind: "thread-host", threadId: "thr_1" },
-      },
+      expected: "/api/v1/threads/thr_1/host-files/tmp/a%20report.pdf",
     },
     {
       source: { kind: "thread-storage" as const, ...ids },
       path: "exports/a report.pdf",
-      expected: {
-        relativePath: "exports/a report.pdf",
-        source: { kind: "thread-storage", threadId: "thr_1" },
-      },
+      expected:
+        "/api/v1/threads/thr_1/thread-storage/files/exports/a%20report.pdf",
     },
-  ])("leases the $source.kind source", ({ source, path, expected }) => {
-    expect(resolvePdfReadTarget(path, source)).toEqual(expected);
+  ])("routes the $source.kind source", ({ source, path, expected }) => {
+    expect(resolvePdfUrl(path, source)).toBe(expected);
   });
 
-  it("leases the project source for a project-backed compose preview", () => {
+  it("routes a project-backed compose preview through its host", () => {
     expect(
-      resolvePdfReadTarget("docs/handbook.pdf", {
+      resolvePdfUrl("docs/handbook.pdf", {
         kind: "workspace",
         threadId: null,
         environmentId: null,
         projectId: "proj_1",
         experimental_hostId: "host_remote",
       }),
-    ).toEqual({
-      relativePath: "docs/handbook.pdf",
-      source: { kind: "project", projectId: "proj_1", hostId: "host_remote" },
-    });
-  });
-});
-
-describe("loadPdfBlob", () => {
-  it("reads the PDF through a lease for its source", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        Response.json({ baseUrl: "/api/v1/file-previews/lease_1" }),
-      )
-      .mockResolvedValueOnce(
-        new Response(new Uint8Array([37, 80, 68, 70]), {
-          headers: { "content-type": "application/pdf" },
-        }),
-      );
-    vi.stubGlobal("fetch", fetchMock);
-
-    const blob = await loadPdfBlob(
-      {
-        relativePath: "docs/a report.pdf",
-        source: { kind: "environment", environmentId: "env_1" },
-      },
-      new AbortController().signal,
-    );
-
-    expect(JSON.parse(fetchMock.mock.calls[0]?.[1].body)).toEqual({
-      source: { kind: "environment", environmentId: "env_1" },
-    });
-    expect(fetchMock.mock.calls[1]?.[0]).toBe(
-      "/api/v1/file-previews/lease_1/docs/a%20report.pdf",
-    );
-    expect(blob.type).toBe("application/pdf");
-    expect(new Uint8Array(await blob.arrayBuffer())).toEqual(
-      new Uint8Array([37, 80, 68, 70]),
-    );
+    ).toBe("/api/v1/projects/proj_1/hosts/host_remote/files/docs/handbook.pdf");
   });
 });

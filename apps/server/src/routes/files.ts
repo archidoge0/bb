@@ -4,7 +4,6 @@ import type { Hono } from "hono";
 import {
   publicApiRoutes,
   typedRoutes,
-  type CreateFilePreviewRequest,
   type PublicApiSchema,
 } from "@bb/server-contract";
 import { COMMAND_TIMEOUT_MS } from "../constants.js";
@@ -44,15 +43,19 @@ import {
 const HOST_FILE_LIST_LIMIT_DEFAULT = 1000;
 
 const FILE_PREVIEW_TTL_MS = 10 * 60 * 1000;
+const REVISION_REF_PATTERN = /^(?:HEAD|[0-9a-f]{4,40})$/iu;
+const WINDOWS_DRIVE_SEGMENT_PATTERN = /^[A-Za-z]:$/u;
 
-interface FilePreviewRoot {
+interface FilePreviewLease {
+  hostId: string;
+  rootPath: string;
+  expiresAtMs: number;
+}
+
+interface FileRoot {
   hostId: string;
   rootPath: string;
   ref: string | null;
-}
-
-interface FilePreviewLease extends FilePreviewRoot {
-  expiresAtMs: number;
 }
 
 function isAbsoluteHostPath(value: string): boolean {
@@ -78,8 +81,84 @@ function requireAbsoluteHostRoot(rootPath: string): string {
   return normalizeHostPath(rootPath);
 }
 
-function filePreviewLeaseKey(root: FilePreviewRoot): string {
-  return JSON.stringify([root.hostId, root.rootPath, root.ref]);
+function filePreviewLeaseKey(root: { hostId: string; rootPath: string }) {
+  return JSON.stringify([root.hostId, root.rootPath]);
+}
+
+function createInvalidFilePathError(): ApiError {
+  return new ApiError(400, "invalid_path", "Invalid file path", false);
+}
+
+function parseRelativeFileSegments(rawPath: string): string[] {
+  const normalizedPath = rawPath.replace(/\\/g, "/");
+  const segments = normalizedPath.split("/");
+  if (
+    normalizedPath.startsWith("/") ||
+    normalizedPath.includes("\0") ||
+    segments.some(
+      (segment) => segment === "" || segment === "." || segment === "..",
+    )
+  ) {
+    throw createInvalidFilePathError();
+  }
+  return segments;
+}
+
+function parseAbsoluteHostFile(rawPath: string): {
+  rootPath: string;
+  segments: string[];
+} {
+  const segments = parseRelativeFileSegments(rawPath);
+  const [firstSegment, ...rest] = segments;
+  if (
+    firstSegment === undefined ||
+    !WINDOWS_DRIVE_SEGMENT_PATTERN.test(firstSegment)
+  ) {
+    return { rootPath: "/", segments };
+  }
+  if (rest.length === 0) {
+    throw createInvalidFilePathError();
+  }
+  return { rootPath: `${firstSegment}\\`, segments: rest };
+}
+
+function parseRevisionRef(ref: string): string {
+  if (!REVISION_REF_PATTERN.test(ref)) {
+    throw new ApiError(400, "invalid_ref", "Invalid revision", false);
+  }
+  return ref;
+}
+
+async function serveRootedFile(
+  deps: AppDeps,
+  request: Request,
+  root: FileRoot,
+  segments: string[],
+): Promise<Response> {
+  const filePath = joinHostPath(root.rootPath, segments);
+  if (root.ref === null) {
+    return serveDaemonFileStream(
+      deps,
+      { hostId: root.hostId, path: filePath, rootPath: root.rootPath },
+      request,
+      createRawFileHeaders,
+    );
+  }
+  const result = await callHostRetryableOnlineRpc(deps, {
+    hostId: root.hostId,
+    timeoutMs: COMMAND_TIMEOUT_MS,
+    command: {
+      type: "host.read_file",
+      path: filePath,
+      rootPath: root.rootPath,
+      ref: root.ref,
+    },
+  }).catch(remapDaemonFileRouteError);
+  const content = requireDaemonFileContentResult(result);
+  return createDaemonFileContentResponse(content, {
+    headers: createRawFileHeaders(content),
+    ifNoneMatch: request.headers.get("if-none-match") ?? undefined,
+  });
 }
 
 export function registerFileRoutes(app: Hono, deps: AppDeps): void {
@@ -88,6 +167,9 @@ export function registerFileRoutes(app: Hono, deps: AppDeps): void {
   });
   const fileRoutes = publicApiRoutes.files;
   const previewRoutes = publicApiRoutes.filePreviews;
+  const threadRoutes = publicApiRoutes.threads;
+  const environmentRoutes = publicApiRoutes.environments;
+  const projectRoutes = publicApiRoutes.projects;
   const previewLeases = new Map<string, FilePreviewLease>();
   const previewLeaseIdsByKey = new Map<string, string>();
 
@@ -286,63 +368,11 @@ export function registerFileRoutes(app: Hono, deps: AppDeps): void {
     }),
   );
 
-  const resolveFilePreviewRoot = async (
-    payload: CreateFilePreviewRequest,
-  ): Promise<FilePreviewRoot> => {
-    if (!("source" in payload)) {
-      return {
-        hostId: resolveHostId(payload.hostId),
-        rootPath: requireAbsoluteHostRoot(payload.rootPath),
-        ref: null,
-      };
-    }
-    const { source } = payload;
-    switch (source.kind) {
-      case "thread-storage": {
-        const target = await requireThreadStorageTarget(deps, source.threadId);
-        return {
-          hostId: target.hostId,
-          rootPath: target.storagePath,
-          ref: null,
-        };
-      }
-      case "thread-host":
-        return {
-          hostId: requireThreadEnvironmentHostId(deps, source.threadId),
-          rootPath: "/",
-          ref: null,
-        };
-      case "environment": {
-        const environment = requireReadyEnvironment(
-          deps.db,
-          source.environmentId,
-        );
-        return {
-          hostId: environment.hostId,
-          rootPath: environment.path,
-          ref: source.ref ?? null,
-        };
-      }
-      case "project": {
-        requirePublicProject(deps.db, source.projectId);
-        const target = resolveProjectWorkspaceTarget(deps, {
-          projectId: source.projectId,
-          ...(source.environmentId !== undefined
-            ? { environmentId: source.environmentId }
-            : {}),
-          ...(source.hostId !== undefined ? { hostId: source.hostId } : {}),
-        });
-        return { hostId: target.hostId, rootPath: target.path, ref: null };
-      }
-      default: {
-        const exhaustive: never = source;
-        return exhaustive;
-      }
-    }
-  };
-
-  post(fileRoutes.createPreview, async (context, payload) => {
-    const root = await resolveFilePreviewRoot(payload);
+  post(fileRoutes.createPreview, (context, payload) => {
+    const root = {
+      hostId: resolveHostId(payload.hostId),
+      rootPath: requireAbsoluteHostRoot(payload.rootPath),
+    };
     const now = Date.now();
     for (const [id, lease] of previewLeases) {
       if (lease.expiresAtMs <= now) {
@@ -371,39 +401,117 @@ export function registerFileRoutes(app: Hono, deps: AppDeps): void {
       previewLeases.delete(id);
       throw new ApiError(404, "not_found", "File preview expired", false);
     }
-    const rawPath = context.req.param("filePath").replace(/\\/g, "/");
-    const segments = rawPath.split("/");
-    if (
-      rawPath.startsWith("/") ||
-      segments.some(
-        (segment) => segment === "" || segment === "." || segment === "..",
-      )
-    ) {
-      throw new ApiError(400, "invalid_path", "Invalid preview path", false);
-    }
-    const filePath = joinHostPath(lease.rootPath, segments);
-    if (lease.ref !== null) {
-      const result = await callHostRetryableOnlineRpc(deps, {
-        hostId: lease.hostId,
-        timeoutMs: COMMAND_TIMEOUT_MS,
-        command: {
-          type: "host.read_file",
-          path: filePath,
-          rootPath: lease.rootPath,
-          ref: lease.ref,
-        },
-      }).catch(remapDaemonFileRouteError);
-      const content = requireDaemonFileContentResult(result);
-      return createDaemonFileContentResponse(content, {
-        headers: createRawFileHeaders(content),
-        ifNoneMatch: context.req.header("if-none-match"),
-      });
-    }
-    return serveDaemonFileStream(
+    return serveRootedFile(
       deps,
-      { hostId: lease.hostId, path: filePath, rootPath: lease.rootPath },
       context.req.raw,
-      createRawFileHeaders,
+      { hostId: lease.hostId, rootPath: lease.rootPath, ref: null },
+      parseRelativeFileSegments(context.req.param("filePath")),
     );
   });
+
+  get(threadRoutes.storageFile, async (context) => {
+    const target = await requireThreadStorageTarget(
+      deps,
+      context.req.param("id"),
+    );
+    return serveRootedFile(
+      deps,
+      context.req.raw,
+      { hostId: target.hostId, rootPath: target.storagePath, ref: null },
+      parseRelativeFileSegments(context.req.param("filePath")),
+    );
+  });
+
+  get(threadRoutes.hostFile, async (context) => {
+    const hostId = requireThreadEnvironmentHostId(
+      deps,
+      context.req.param("id"),
+    );
+    const file = parseAbsoluteHostFile(context.req.param("filePath"));
+    return serveRootedFile(
+      deps,
+      context.req.raw,
+      { hostId, rootPath: file.rootPath, ref: null },
+      file.segments,
+    );
+  });
+
+  get(publicApiRoutes.hosts.file, async (context) => {
+    const hostId = context.req.param("id");
+    assertUsableHostId(deps, { hostId });
+    const file = parseAbsoluteHostFile(context.req.param("filePath"));
+    return serveRootedFile(
+      deps,
+      context.req.raw,
+      { hostId, rootPath: file.rootPath, ref: null },
+      file.segments,
+    );
+  });
+
+  get(environmentRoutes.file, async (context) => {
+    const environment = requireReadyEnvironment(
+      deps.db,
+      context.req.param("id"),
+    );
+    return serveRootedFile(
+      deps,
+      context.req.raw,
+      { hostId: environment.hostId, rootPath: environment.path, ref: null },
+      parseRelativeFileSegments(context.req.param("filePath")),
+    );
+  });
+
+  get(environmentRoutes.revisionFile, async (context) => {
+    const environment = requireReadyEnvironment(
+      deps.db,
+      context.req.param("id"),
+    );
+    return serveRootedFile(
+      deps,
+      context.req.raw,
+      {
+        hostId: environment.hostId,
+        rootPath: environment.path,
+        ref: parseRevisionRef(context.req.param("ref")),
+      },
+      parseRelativeFileSegments(context.req.param("filePath")),
+    );
+  });
+
+  const serveProjectFile = (
+    request: Request,
+    projectId: string,
+    hostId: string | undefined,
+    filePath: string,
+  ): Promise<Response> => {
+    requirePublicProject(deps.db, projectId);
+    const target = resolveProjectWorkspaceTarget(deps, {
+      projectId,
+      ...(hostId !== undefined ? { hostId } : {}),
+    });
+    return serveRootedFile(
+      deps,
+      request,
+      { hostId: target.hostId, rootPath: target.path, ref: null },
+      parseRelativeFileSegments(filePath),
+    );
+  };
+
+  get(projectRoutes.file, async (context) =>
+    serveProjectFile(
+      context.req.raw,
+      context.req.param("id"),
+      undefined,
+      context.req.param("filePath"),
+    ),
+  );
+
+  get(projectRoutes.hostFile, async (context) =>
+    serveProjectFile(
+      context.req.raw,
+      context.req.param("id"),
+      context.req.param("hostId"),
+      context.req.param("filePath"),
+    ),
+  );
 }

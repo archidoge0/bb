@@ -8,7 +8,6 @@ import { HEAVY_PAYLOAD_GC_TIME_MS } from "./query-policies";
 import { useHostFilePreview } from "./host-file-preview-query";
 
 const filesSdk = vi.hoisted(() => ({
-  createPreview: vi.fn(),
   read: vi.fn(),
 }));
 
@@ -30,11 +29,7 @@ afterEach(() => {
 });
 
 describe("useHostFilePreview", () => {
-  it("uses a successful preview lease for media without reading or retaining file bytes", async () => {
-    filesSdk.createPreview.mockResolvedValue({
-      baseUrl: "/api/v1/file-previews/lease-1",
-      expiresAtMs: Date.now() + 60_000,
-    });
+  it("serves media from the host file URL without reading or retaining file bytes", async () => {
     filesSdk.read.mockResolvedValue({
       path: "/tmp/diagram.png",
       content: "iVBORw0KGgo=",
@@ -52,17 +47,13 @@ describe("useHostFilePreview", () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    expect(filesSdk.createPreview).toHaveBeenCalledTimes(1);
-    expect(filesSdk.createPreview).toHaveBeenCalledWith(
-      expect.objectContaining({ hostId: "host-1", rootPath: "/" }),
-    );
     expect(filesSdk.read).not.toHaveBeenCalled();
     expect(result.current.data).toEqual({
       kind: "image",
       mimeType: "image/png",
       name: "diagram.png",
       path: "/tmp/diagram.png",
-      url: "/api/v1/file-previews/lease-1/tmp/diagram.png",
+      url: "/api/v1/hosts/host-1/files/tmp/diagram.png",
     });
     expect(
       queryClient.getQueryCache().find({
@@ -71,11 +62,7 @@ describe("useHostFilePreview", () => {
     ).toBe(HEAVY_PAYLOAD_GC_TIME_MS);
   });
 
-  it("renders text from the lease URL without reading through the files API", async () => {
-    filesSdk.createPreview.mockResolvedValue({
-      baseUrl: "/api/v1/file-previews/lease-2",
-      expiresAtMs: Date.now() + 60_000,
-    });
+  it("renders text from the host file URL without reading through the files API", async () => {
     fetchMock.mockResolvedValue(
       new Response("<h1>Report</h1>", {
         headers: { "content-type": "text/html; charset=utf-8" },
@@ -92,20 +79,16 @@ describe("useHostFilePreview", () => {
     expect(filesSdk.read).not.toHaveBeenCalled();
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0]?.[0]).toBe(
-      "/api/v1/file-previews/lease-2/tmp/report.html",
+      "/api/v1/hosts/host-1/files/tmp/report.html",
     );
     expect(result.current.data).toMatchObject({
       kind: "text",
       content: "<h1>Report</h1>",
-      url: "/api/v1/file-previews/lease-2/tmp/report.html",
+      url: "/api/v1/hosts/host-1/files/tmp/report.html",
     });
   });
 
   it("keeps ambiguous TypeScript paths on the source-preview path", async () => {
-    filesSdk.createPreview.mockResolvedValue({
-      baseUrl: "/api/v1/file-previews/lease-3",
-      expiresAtMs: Date.now() + 60_000,
-    });
     fetchMock.mockResolvedValue(
       new Response("export const value = 1;\n", {
         headers: { "content-type": "video/mp2t" },
@@ -125,8 +108,8 @@ describe("useHostFilePreview", () => {
     });
   });
 
-  it("fails instead of reading the whole file when no preview lease is available", async () => {
-    filesSdk.createPreview.mockRejectedValue(new Error("host unavailable"));
+  it("fails instead of reading the whole file when the host file URL fails", async () => {
+    fetchMock.mockRejectedValue(new Error("host unavailable"));
     const { wrapper } = createQueryClientTestHarness();
     const { result } = renderHook(
       () => useHostFilePreview("host-1", "/tmp/archive.zip"),
@@ -136,15 +119,10 @@ describe("useHostFilePreview", () => {
     await waitFor(() => expect(result.current.isError).toBe(true));
 
     expect(filesSdk.read).not.toHaveBeenCalled();
-    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("aborts an active read and releases the heavy cache entry when disabled", async () => {
     let readSignal: AbortSignal | undefined;
-    filesSdk.createPreview.mockResolvedValue({
-      baseUrl: "/api/v1/file-previews/lease-4",
-      expiresAtMs: Date.now() + 60_000,
-    });
     fetchMock.mockImplementation(
       (_url: string, init: RequestInit) =>
         new Promise((_resolve, reject) => {

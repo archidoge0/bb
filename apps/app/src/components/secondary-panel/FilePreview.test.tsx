@@ -526,7 +526,7 @@ describe("FilePreview", () => {
           iframe: {
             sandbox: "allow-scripts",
             title: "docs/progress-vis.html",
-            url: "/api/v1/file-previews/lease_1/docs/progress-vis.html",
+            url: "/api/v1/threads/thread-1/thread-storage/files/docs/progress-vis.html",
           },
           lineRange: null,
         }}
@@ -538,7 +538,7 @@ describe("FilePreview", () => {
     );
 
     expect(openSpy).toHaveBeenCalledWith(
-      `${window.location.origin}/api/v1/file-previews/lease_1/docs/progress-vis.html`,
+      `${window.location.origin}/api/v1/threads/thread-1/thread-storage/files/docs/progress-vis.html`,
       "_blank",
       "noopener,noreferrer",
     );
@@ -620,7 +620,7 @@ describe("FilePreview", () => {
           iframe: {
             sandbox: "allow-scripts",
             title: "docs/progress-vis.html",
-            url: "/api/v1/file-previews/lease_1/docs/progress-vis.html",
+            url: "/api/v1/threads/thread-1/thread-storage/files/docs/progress-vis.html",
           },
           lineRange: null,
         }}
@@ -663,7 +663,7 @@ describe("FilePreview", () => {
             iframe: {
               sandbox: "allow-scripts",
               title: "docs/progress-vis.html",
-              url: "/api/v1/file-previews/lease_1/docs/progress-vis.html",
+              url: "/api/v1/threads/thread-1/thread-storage/files/docs/progress-vis.html",
             },
             lineRange: null,
           }}
@@ -675,7 +675,7 @@ describe("FilePreview", () => {
       );
 
       expect(openExternalUrl).toHaveBeenCalledWith(
-        `${window.location.origin}/api/v1/file-previews/lease_1/docs/progress-vis.html`,
+        `${window.location.origin}/api/v1/threads/thread-1/thread-storage/files/docs/progress-vis.html`,
       );
     } finally {
       delete (window as unknown as { bbDesktop?: unknown }).bbDesktop;
@@ -1026,9 +1026,9 @@ describe("FilePreview", () => {
           content,
           mimeType: "text/html",
           path: "reports/large.html",
-          url: "/api/v1/file-previews/lease_1/reports/large.html",
+          url: "/api/v1/threads/thread-1/thread-storage/files/reports/large.html",
         }}
-        htmlPreviewUrl="/api/v1/file-previews/lease_1/reports/large.html"
+        htmlPreviewUrl="/api/v1/threads/thread-1/thread-storage/files/reports/large.html"
         isLoading={false}
       />,
     );
@@ -1046,18 +1046,20 @@ describe("FilePreview", () => {
           path: "reports/huge.html",
           reason: "too-large",
           sizeBytes: 30 * 1024 * 1024,
-          url: "/api/v1/file-previews/lease_1/reports/huge.html",
+          url: "/api/v1/threads/thread-1/thread-storage/files/reports/huge.html",
         }}
-        htmlPreviewUrl="/api/v1/file-previews/lease_1/reports/huge.html"
+        htmlPreviewUrl="/api/v1/threads/thread-1/thread-storage/files/reports/huge.html"
         isLoading={false}
       />,
     );
 
     expect(view.container.querySelector("iframe")).toBeNull();
-    expect(screen.getByText("This file is too large to preview.")).not.toBeNull();
+    expect(
+      screen.getByText("This file is too large to preview."),
+    ).not.toBeNull();
     expect(
       screen.getByRole("link", { name: "Download" }).getAttribute("href"),
-    ).toBe("/api/v1/file-previews/lease_1/reports/huge.html");
+    ).toBe("/api/v1/threads/thread-1/thread-storage/files/reports/huge.html");
   });
 
   it("links Download to the file's raw URL under its basename", () => {
@@ -1078,7 +1080,9 @@ describe("FilePreview", () => {
 
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.getByText("application/zip · 2.0 KB")).not.toBeNull();
-    expect(screen.getByText("This file type can't be previewed.")).not.toBeNull();
+    expect(
+      screen.getByText("This file type can't be previewed."),
+    ).not.toBeNull();
     const download = screen.getByRole("link", { name: "Download" });
     expect(download.getAttribute("href")).toBe(
       "/api/v1/projects/p1/files/raw?path=qa%2Freport-with-images.zip",

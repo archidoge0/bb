@@ -7,7 +7,6 @@ import {
 import { z } from "zod";
 
 export const MAX_PREVIEW_BYTES = 5 * 1024 * 1024;
-export const PREVIEW_LEASE_TTL_MS = 60 * 60 * 1000;
 
 type PreviewKind = "html" | "markdown";
 
@@ -221,20 +220,21 @@ export default async function plugin(bb: BbPluginApi) {
 
       const kind = previewKind(file);
       if (kind === "markdown") {
-        return { kind, file, source, target, rootPath, content: result.content };
+        return {
+          kind,
+          file,
+          source,
+          target,
+          rootPath,
+          content: result.content,
+        };
       }
-      const lease = await bb.sdk.files.createPreview({
-        hostId,
-        rootPath,
-        ttlMs: PREVIEW_LEASE_TTL_MS,
-      });
-      return {
-        kind,
-        file,
-        source,
-        target,
-        url: `${lease.baseUrl}/${file.split("/").map(encodeURIComponent).join("/")}`,
-      };
+      const encodedFile = file.split("/").map(encodeURIComponent).join("/");
+      const url =
+        target.kind === "thread-storage"
+          ? `/api/v1/threads/${encodeURIComponent(threadId)}/thread-storage/files/${encodedFile}`
+          : `/api/v1/environments/${encodeURIComponent(target.environmentId)}/files/${encodedFile}`;
+      return { kind, file, source, target, url };
     },
   });
 }

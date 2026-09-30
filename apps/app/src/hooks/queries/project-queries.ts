@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useCallback, useRef } from "react";
 import type {
   CommandListResponse,
@@ -9,11 +9,7 @@ import type {
 } from "@bb/server-contract";
 import type { FilePreview } from "@bb/client-core";
 import { loadFilePreview } from "@/lib/api";
-import {
-  projectFileLeaseTarget,
-  type ProjectFileRouting,
-} from "@/lib/file-lease";
-import { fetchFileLeaseUrl } from "./file-lease-queries";
+import { buildProjectFileContentUrl } from "@/lib/file-content-urls";
 import { readProjectBranchOptions } from "@/lib/project-branch-options";
 import { sdk } from "@/lib/sdk";
 import { useProjectDetailRealtimeSubscription } from "@/hooks/useRealtimeSubscription";
@@ -230,6 +226,11 @@ export function useProjectPathSuggestions(args: UseProjectPathSuggestionsArgs) {
   });
 }
 
+interface ProjectFileRouting {
+  environmentId: string | null;
+  hostId: string | null;
+}
+
 export function useProjectFilePreview(
   projectId: string | undefined,
   path: string | null,
@@ -239,7 +240,6 @@ export function useProjectFilePreview(
   const enabled =
     (options?.enabled ?? true) && Boolean(projectId) && Boolean(path);
   useProjectDetailRealtimeSubscription(projectId, { enabled });
-  const queryClient = useQueryClient();
 
   return useQuery<FilePreview>({
     queryKey: projectFilePreviewQueryKey(
@@ -262,10 +262,10 @@ export function useProjectFilePreview(
         {
           name: requiredPath.split("/").at(-1),
           path: requiredPath,
-          url: await fetchFileLeaseUrl(
-            queryClient,
-            projectFileLeaseTarget(requiredProjectId, routing),
+          url: buildProjectFileContentUrl(
+            requiredProjectId,
             requiredPath,
+            routing,
           ),
         },
         signal,

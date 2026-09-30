@@ -26,10 +26,7 @@ async function load(sdk: {
     get?: (args: unknown) => unknown;
     storageLocation?: (args: unknown) => unknown;
   };
-  files?: {
-    read: (args: unknown) => unknown;
-    createPreview?: (args: unknown) => unknown;
-  };
+  files?: { read: (args: unknown) => unknown };
 }) {
   const host = createFakePluginHost({
     pluginId: "inline-vis",
@@ -262,14 +259,6 @@ describe("preparePreview rpc", () => {
             sha256: "abc",
           };
         },
-        createPreview: (args) => {
-          expect(args).toEqual({
-            hostId: HOST_ID,
-            rootPath: ROOT,
-            ttlMs: 60 * 60 * 1000,
-          });
-          return { baseUrl: "/api/v1/file-previews/lease_ws" };
-        },
       },
     });
 
@@ -287,7 +276,7 @@ describe("preparePreview rpc", () => {
         environmentId: "env_1",
         path: "charts/demo.html",
       },
-      url: "/api/v1/file-previews/lease_ws/charts/demo.html",
+      url: "/api/v1/environments/env_1/files/charts/demo.html",
     });
     expect(harness.sdk.callsTo("files.read")).toHaveLength(1);
   });
@@ -315,14 +304,6 @@ describe("preparePreview rpc", () => {
             sha256: "abc",
           };
         },
-        createPreview: (args) => {
-          expect(args).toEqual({
-            hostId: HOST_ID,
-            rootPath: storageRootPath,
-            ttlMs: 60 * 60 * 1000,
-          });
-          return { baseUrl: "/api/v1/file-previews/lease_ts" };
-        },
       },
     });
 
@@ -340,7 +321,7 @@ describe("preparePreview rpc", () => {
         threadId: "thr_1",
         path: "reports/result.html",
       },
-      url: "/api/v1/file-previews/lease_ts/reports/result.html",
+      url: "/api/v1/threads/thr_1/thread-storage/files/reports/result.html",
     });
     expect(harness.sdk.callsTo("threads.storageLocation")).toHaveLength(1);
     expect(harness.sdk.callsTo("threads.get")).toHaveLength(0);

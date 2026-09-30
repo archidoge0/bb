@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import { registerHostRpcResponder } from "../helpers/host-rpc.js";
 import { readJson } from "../helpers/json.js";
 import {
-  seedEnvironment,
   seedHostSession,
   seedPrimaryHost,
   seedProjectWithSource,
@@ -35,7 +34,10 @@ function postJson(path: string, body: unknown): [string, RequestInit] {
   ];
 }
 
-async function mintLease(harness: TestHarness, body: unknown): Promise<string> {
+async function createLease(
+  harness: TestHarness,
+  body: unknown,
+): Promise<string> {
   const response = await harness.app.request(
     ...postJson("/api/v1/files/previews", body),
   );
@@ -96,8 +98,8 @@ function serveFiles(
   return commands;
 }
 
-describe("file preview lease sources", () => {
-  it("streams thread storage through a source lease with ranges and sandboxed HTML", async () => {
+describe("file content routes", () => {
+  it("streams thread storage with ranges and sandboxed HTML", async () => {
     await withTestHarness(async (harness) => {
       const { host, session, thread } = seedThreadFixture(harness);
       const storageRoot = `/tmp/bb-host-data/${host.id}/thread-storage/${thread.id}`;
@@ -118,9 +120,7 @@ describe("file preview lease sources", () => {
           ],
         ]),
       });
-      const baseUrl = await mintLease(harness, {
-        source: { kind: "thread-storage", threadId: thread.id },
-      });
+      const baseUrl = `/api/v1/threads/${thread.id}/thread-storage/files`;
 
       const clip = await harness.app.request(`${baseUrl}/clip.mp4`, {
         headers: { Range: "bytes=0-1" },
@@ -183,9 +183,7 @@ describe("file preview lease sources", () => {
           };
         },
       });
-      const baseUrl = await mintLease(harness, {
-        source: { kind: "thread-storage", threadId: thread.id },
-      });
+      const baseUrl = `/api/v1/threads/${thread.id}/thread-storage/files`;
 
       const response = await harness.app.request(`${baseUrl}/clip.mp4`);
 
@@ -209,9 +207,7 @@ describe("file preview lease sources", () => {
           [`${storageRoot}/large.html`, { bytes: html, mimeType: "text/html" }],
         ]),
       });
-      const baseUrl = await mintLease(harness, {
-        source: { kind: "thread-storage", threadId: thread.id },
-      });
+      const baseUrl = `/api/v1/threads/${thread.id}/thread-storage/files`;
 
       const response = await harness.app.request(`${baseUrl}/large.html`);
 
@@ -224,7 +220,7 @@ describe("file preview lease sources", () => {
     });
   });
 
-  it("leases thread host files at the filesystem root without a ready environment", async () => {
+  it("reads thread host files from the filesystem root without a ready environment", async () => {
     await withTestHarness(async (harness) => {
       const { host, session, thread } = seedThreadFixture(harness, {
         environment: { status: "provisioning" },
@@ -239,12 +235,8 @@ describe("file preview lease sources", () => {
           ],
         ]),
       });
-      const baseUrl = await mintLease(harness, {
-        source: { kind: "thread-host", threadId: thread.id },
-      });
-
       const response = await harness.app.request(
-        `${baseUrl}/Users/me/notes/plan.md`,
+        `/api/v1/threads/${thread.id}/host-files/Users/me/notes/plan.md`,
       );
 
       expect(response.status).toBe(200);
@@ -257,7 +249,7 @@ describe("file preview lease sources", () => {
     });
   });
 
-  it("refuses a thread host lease for a thread without an environment", async () => {
+  it("refuses thread host files for a thread without an environment", async () => {
     await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
@@ -269,9 +261,7 @@ describe("file preview lease sources", () => {
       });
 
       const response = await harness.app.request(
-        ...postJson("/api/v1/files/previews", {
-          source: { kind: "thread-host", threadId: thread.id },
-        }),
+        `/api/v1/threads/${thread.id}/host-files/tmp/x.bin`,
       );
 
       expect(response.status).toBe(409);
@@ -286,7 +276,7 @@ describe("file preview lease sources", () => {
     { errorCode: "invalid_path", expectedStatus: 400 },
     { errorCode: "ENOENT", expectedStatus: 404 },
   ])(
-    "maps daemon $errorCode failures on lease reads to $expectedStatus",
+    "maps daemon $errorCode failures on file reads to $expectedStatus",
     async ({ errorCode, expectedStatus }) => {
       await withTestHarness(async (harness) => {
         const { host, session, thread } = seedThreadFixture(harness);
@@ -299,11 +289,9 @@ describe("file preview lease sources", () => {
             errorMessage: "Read failed",
           }),
         });
-        const baseUrl = await mintLease(harness, {
-          source: { kind: "thread-host", threadId: thread.id },
-        });
-
-        const response = await harness.app.request(`${baseUrl}/tmp/x.bin`);
+        const response = await harness.app.request(
+          `/api/v1/threads/${thread.id}/host-files/tmp/x.bin`,
+        );
 
         expect(response.status).toBe(expectedStatus);
         await expect(readJson(response)).resolves.toMatchObject({
@@ -358,12 +346,12 @@ describe("file preview lease sources", () => {
         },
       });
 
-      const workingTree = await mintLease(harness, {
-        source: { kind: "environment", environmentId: environment.id },
-      });
-      const zip = await harness.app.request(`${workingTree}/dist/app.zip`, {
-        headers: { Range: "bytes=0-3" },
-      });
+      const zip = await harness.app.request(
+        `/api/v1/environments/${environment.id}/files/dist/app.zip`,
+        {
+          headers: { Range: "bytes=0-3" },
+        },
+      );
       expect(zip.status).toBe(206);
       expect(zip.headers.get("content-range")).toBe("bytes 0-3/8");
       expect(commands.at(-1)).toMatchObject({
@@ -372,14 +360,7 @@ describe("file preview lease sources", () => {
         rootPath: "/tmp/lease-env",
       });
 
-      const head = await mintLease(harness, {
-        source: {
-          kind: "environment",
-          environmentId: environment.id,
-          ref: "HEAD",
-        },
-      });
-      expect(head).not.toBe(workingTree);
+      const head = `/api/v1/environments/${environment.id}/revisions/HEAD/files`;
       const logo = await harness.app.request(`${head}/logo.bin`);
       expect(logo.status).toBe(200);
       expect(Buffer.from(await logo.arrayBuffer())).toEqual(
@@ -396,21 +377,24 @@ describe("file preview lease sources", () => {
         headers: { "if-none-match": `"${"a".repeat(64)}"` },
       });
       expect(revalidated.status).toBe(304);
+
+      const optionRef = await harness.app.request(
+        `/api/v1/environments/${environment.id}/revisions/--output=x/files/logo.bin`,
+      );
+      expect(optionRef.status).toBe(400);
+      await expect(readJson(optionRef)).resolves.toMatchObject({
+        code: "invalid_ref",
+      });
     });
   });
 
-  it("resolves project sources and rejects conflicting selectors", async () => {
+  it("reads project files from the primary host source or a named host", async () => {
     await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps);
       seedPrimaryHost(harness.deps, host.id);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
         path: "/primary/project",
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-        path: "/primary/worktree",
       });
       const commands = serveFiles(harness, {
         hostId: host.id,
@@ -420,72 +404,75 @@ describe("file preview lease sources", () => {
             "/primary/project/qa/report.zip",
             { bytes: Buffer.from([1, 2, 3]), mimeType: "application/zip" },
           ],
-          [
-            "/primary/worktree/qa/report.zip",
-            { bytes: Buffer.from([4, 5, 6]), mimeType: "application/zip" },
-          ],
         ]),
       });
 
-      const primary = await mintLease(harness, {
-        source: { kind: "project", projectId: project.id },
-      });
-      const fromSource = await harness.app.request(`${primary}/qa/report.zip`);
-      expect(Buffer.from(await fromSource.arrayBuffer())).toEqual(
+      const primary = await harness.app.request(
+        `/api/v1/projects/${project.id}/files/qa/report.zip`,
+      );
+      expect(Buffer.from(await primary.arrayBuffer())).toEqual(
         Buffer.from([1, 2, 3]),
       );
-
-      const inEnvironment = await mintLease(harness, {
-        source: {
-          kind: "project",
-          projectId: project.id,
-          environmentId: environment.id,
-        },
-      });
-      const fromEnvironment = await harness.app.request(
-        `${inEnvironment}/qa/report.zip`,
+      const named = await harness.app.request(
+        `/api/v1/projects/${project.id}/hosts/${host.id}/files/qa/report.zip`,
       );
-      expect(Buffer.from(await fromEnvironment.arrayBuffer())).toEqual(
-        Buffer.from([4, 5, 6]),
+      expect(Buffer.from(await named.arrayBuffer())).toEqual(
+        Buffer.from([1, 2, 3]),
       );
       expect(
         commands.map((command) =>
           command.type === "host.read_file_chunk" ? command.rootPath : null,
         ),
-      ).toEqual(
-        expect.arrayContaining(["/primary/project", "/primary/worktree"]),
-      );
-
-      const conflicting = await harness.app.request(
-        ...postJson("/api/v1/files/previews", {
-          source: {
-            kind: "project",
-            projectId: project.id,
-            environmentId: environment.id,
-            hostId: host.id,
-          },
-        }),
-      );
-      expect(conflicting.status).toBe(400);
-      await expect(readJson(conflicting)).resolves.toMatchObject({
-        message: expect.stringContaining("mutually exclusive"),
-      });
+      ).toEqual(Array(commands.length).fill("/primary/project"));
     });
   });
 
-  it("reuses one lease URL per resolved source", async () => {
+  it("maps Windows drive paths to the drive root and rejects backslash traversal", async () => {
     await withTestHarness(async (harness) => {
-      const { thread } = seedThreadFixture(harness);
-      const storage = { kind: "thread-storage", threadId: thread.id };
-
-      const first = await mintLease(harness, { source: storage });
-      const second = await mintLease(harness, { source: storage });
-      const host = await mintLease(harness, {
-        source: { kind: "thread-host", threadId: thread.id },
+      const { host, session } = seedHostSession(harness.deps);
+      const commands = serveFiles(harness, {
+        hostId: host.id,
+        sessionId: session.id,
+        files: new Map([
+          [
+            "C:\\Users\\me\\chart.png",
+            { bytes: Buffer.from([7, 8]), mimeType: "image/png" },
+          ],
+        ]),
       });
 
+      const chart = await harness.app.request(
+        `/api/v1/hosts/${host.id}/files/C%3A/Users/me/chart.png`,
+      );
+      expect(chart.status).toBe(200);
+      expect(commands[0]).toMatchObject({
+        path: "C:\\Users\\me\\chart.png",
+        rootPath: "C:\\",
+      });
+
+      const commandCount = commands.length;
+      const traversal = await harness.app.request(
+        `/api/v1/hosts/${host.id}/files/tmp/..%5Cetc/passwd`,
+      );
+      expect(traversal.status).toBe(400);
+      expect(commands).toHaveLength(commandCount);
+    });
+  });
+
+  it("reuses one lease URL per host root", async () => {
+    await withTestHarness(async (harness) => {
+      const { host } = seedHostSession(harness.deps);
+      seedPrimaryHost(harness.deps, host.id);
+
+      const first = await createLease(harness, { rootPath: "/notes" });
+      const second = await createLease(harness, {
+        hostId: host.id,
+        rootPath: "/notes",
+      });
+      const other = await createLease(harness, { rootPath: "/other" });
+
       expect(second).toBe(first);
-      expect(host).not.toBe(first);
+      expect(other).not.toBe(first);
     });
   });
 });

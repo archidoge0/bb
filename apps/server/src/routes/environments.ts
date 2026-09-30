@@ -247,20 +247,6 @@ async function runPullRequestAction(
   );
 }
 
-function resolveDiffFileAbsolutePath(
-  environment: { path: string },
-  query: EnvironmentDiffFileQuery,
-): string {
-  const repoRelativePath = query.path.replace(/^\/+/u, "");
-  if (
-    repoRelativePath.length === 0 ||
-    repoRelativePath.split("/").includes("..")
-  ) {
-    throw new ApiError(400, "invalid_request", "Invalid path");
-  }
-  return path.join(environment.path, repoRelativePath);
-}
-
 function resolveDiffFileRef(
   query: EnvironmentDiffFileQuery,
 ): string | undefined {
@@ -596,7 +582,14 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
       deps.db,
       context.req.param("id"),
     );
-    const absolutePath = resolveDiffFileAbsolutePath(environment, query);
+    const repoRelativePath = query.path.replace(/^\/+/u, "");
+    if (
+      repoRelativePath.length === 0 ||
+      repoRelativePath.split("/").includes("..")
+    ) {
+      throw new ApiError(400, "invalid_request", "Invalid path");
+    }
+    const absolutePath = path.join(environment.path, repoRelativePath);
     const ref = resolveDiffFileRef(query);
     const result = await callHostRetryableOnlineRpc(deps, {
       hostId: environment.hostId,

@@ -1,4 +1,3 @@
-import { ThreadHostFileLeaseProvider } from "./ThreadHostFileLeaseContext";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type {
   ActiveThinking,
@@ -203,7 +202,6 @@ export function ThreadTimelineSurface({
 
   return (
     <TimelineReasoningExpansionProvider key={threadId}>
-      <ThreadHostFileLeaseProvider threadId={threadId}>
       <ConversationTimeline className="flex-1">
         {leadingContent}
         {showLoadOlderRows ? (
@@ -268,7 +266,6 @@ export function ThreadTimelineSurface({
           />
         </HeightTransition>
       </ConversationTimeline>
-      </ThreadHostFileLeaseProvider>
     </TimelineReasoningExpansionProvider>
   );
 }

@@ -1,12 +1,5 @@
 // @vitest-environment jsdom
 
-import { createFileLeaseTestHarness } from "@/test/threadHostFileLeaseTestHarness";
-import { fileLeaseQueryKey } from "@/hooks/queries/query-keys";
-import {
-  threadHostFileLeaseTarget,
-  threadStorageFileLeaseTarget,
-  type FileLeaseTarget,
-} from "@/lib/file-lease";
 import { LazyMarkdownHtml } from "@/components/ui/lazy-markdown-html";
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
@@ -25,22 +18,6 @@ import { ThreadTimelineNavigationProvider } from "@/components/thread/timeline/T
 import { pluginSdkAppImplementation } from "./plugin-sdk-app-impl";
 import { resetDeprecatedAliasWarningsForTests } from "./plugin-sdk-deprecated-aliases";
 import { AppNavigationHostProvider } from "./app-navigation-host";
-
-function fileLeaseWrapper({
-  leases = [],
-  timelineThreadId,
-}: {
-  leases?: ReadonlyArray<readonly [FileLeaseTarget, string]>;
-  timelineThreadId?: string;
-}) {
-  const { queryClient, wrapper } = createFileLeaseTestHarness(
-    timelineThreadId === undefined ? {} : { timelineThreadId },
-  );
-  for (const [target, baseUrl] of leases) {
-    queryClient.setQueryData(fileLeaseQueryKey(target), baseUrl);
-  }
-  return wrapper;
-}
 
 beforeAll(() => LazyMarkdownHtml.preload());
 
@@ -167,17 +144,6 @@ describe("plugin SDK Markdown", () => {
           <Markdown content="Open [README](README.md), ![chart](images/chart.png), or [the docs](https://example.com/docs)." />
         </ThreadTimelineNavigationProvider>
       </AppNavigationHostProvider>,
-      {
-        wrapper: fileLeaseWrapper({
-          leases: [
-            [
-              threadHostFileLeaseTarget("thr_plugin"),
-              "/api/v1/file-previews/lease_host",
-            ],
-          ],
-          timelineThreadId: "thr_plugin",
-        }),
-      },
     );
 
     const fileLink = screen.getByRole("link", { name: "README" });
@@ -188,7 +154,7 @@ describe("plugin SDK Markdown", () => {
       path: "/workspace/README.md",
     });
     expect(screen.getByRole("img", { name: "chart" }).getAttribute("src")).toBe(
-      "/api/v1/file-previews/lease_host/workspace/images/chart.png",
+      "/api/v1/threads/thr_plugin/host-files/workspace/images/chart.png",
     );
 
     fireEvent.click(screen.getByRole("link", { name: "the docs" }));
@@ -237,21 +203,6 @@ describe("plugin SDK Markdown", () => {
             <Markdown {...props} />
           </ThreadTimelineNavigationProvider>
         </AppNavigationHostProvider>,
-        {
-          wrapper: fileLeaseWrapper({
-            leases: [
-              [
-                threadHostFileLeaseTarget("thr_document"),
-                "/api/v1/file-previews/lease_host",
-              ],
-              [
-                threadStorageFileLeaseTarget("thr_document"),
-                "/api/v1/file-previews/lease_storage",
-              ],
-            ],
-            timelineThreadId: "thr_other",
-          }),
-        },
       );
       fireEvent.click(screen.getByRole("link", { name: "Sibling" }));
       expect(openFilePreview).toHaveBeenLastCalledWith({
@@ -262,13 +213,13 @@ describe("plugin SDK Markdown", () => {
         screen.getByRole("img", { name: "Chart" }).getAttribute("src"),
       ).toBe(
         kind === "workspace"
-          ? "/api/v1/file-previews/lease_host/workspace/reports/chart%20one.svg"
-          : "/api/v1/file-previews/lease_storage/reports/chart%20one.svg",
+          ? "/api/v1/environments/env_document/files/reports/chart%20one.svg"
+          : "/api/v1/threads/thr_document/thread-storage/files/reports/chart%20one.svg",
       );
       expect(screen.getByLabelText("Clip").getAttribute("src")).toBe(
         kind === "workspace"
-          ? "/api/v1/file-previews/lease_host/workspace/reports/clip.mp4"
-          : "/api/v1/file-previews/lease_storage/reports/clip.mp4",
+          ? "/api/v1/environments/env_document/files/reports/clip.mp4"
+          : "/api/v1/threads/thr_document/thread-storage/files/reports/clip.mp4",
       );
       fireEvent.click(screen.getByRole("link", { name: "Parent" }));
       expect(openFilePreview).toHaveBeenLastCalledWith({
@@ -313,21 +264,6 @@ describe("plugin SDK Markdown", () => {
           />
         </ThreadTimelineNavigationProvider>
       </AppNavigationHostProvider>,
-      {
-        wrapper: fileLeaseWrapper({
-          leases: [
-            [
-              threadHostFileLeaseTarget("thr_document"),
-              "/api/v1/file-previews/lease_host",
-            ],
-            [
-              threadStorageFileLeaseTarget("thr_document"),
-              "/api/v1/file-previews/lease_storage",
-            ],
-          ],
-          timelineThreadId: "thr_document",
-        }),
-      },
     );
     expect(
       screen.getByRole("link", { name: "Escape" }).getAttribute("href"),
@@ -343,7 +279,7 @@ describe("plugin SDK Markdown", () => {
     });
     expect(
       screen.getByRole("img", { name: "Absolute" }).getAttribute("src"),
-    ).toBe("/api/v1/file-previews/lease_host/outside.svg");
+    ).toBe("/api/v1/threads/thr_document/host-files/outside.svg");
   });
 
   it("routes web links without requiring a thread navigation context", () => {
@@ -353,7 +289,6 @@ describe("plugin SDK Markdown", () => {
       <AppNavigationHostProvider capabilities={{ openUrl }}>
         <Markdown content="[Docs](https://example.com/docs)" />
       </AppNavigationHostProvider>,
-      { wrapper: fileLeaseWrapper({}) },
     );
     fireEvent.click(screen.getByRole("link", { name: "Docs" }));
     expect(openUrl).toHaveBeenCalledWith({ url: "https://example.com/docs" });

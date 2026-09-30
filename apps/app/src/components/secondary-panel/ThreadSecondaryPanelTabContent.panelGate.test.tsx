@@ -20,7 +20,6 @@ import {
 vi.mock("@/lib/sdk", () => ({
   sdk: {
     environments: { diffFiles: vi.fn() },
-    files: { createPreview: vi.fn() },
   },
 }));
 
@@ -108,10 +107,6 @@ describe("GitDiffTabContent panel gating", () => {
 
 describe("WorkspaceFilePreviewTabContent panel gating", () => {
   it("does not refetch an invalidated preview while the panel is closed", async () => {
-    vi.mocked(sdk.files.createPreview).mockResolvedValue({
-      baseUrl: "/api/v1/file-previews/lease-env",
-      expiresAtMs: Date.now() + 60_000,
-    });
     const { queryClient, wrapper: Wrapper } = createQueryClientTestHarness();
     const renderTab = (isPanelOpen: boolean) => (
       <Wrapper>
@@ -149,10 +144,6 @@ describe("WorkspaceFilePreviewTabContent panel gating", () => {
 
 describe("HostScopedFilePreviewTabContent panel gating", () => {
   it("does not start or refetch a host read while the retained panel is closed", async () => {
-    vi.mocked(sdk.files.createPreview).mockResolvedValue({
-      baseUrl: "/api/v1/file-previews/lease-1",
-      expiresAtMs: Date.now() + 60_000,
-    });
     const { queryClient, wrapper: Wrapper } = createQueryClientTestHarness();
     const renderTab = (isPanelOpen: boolean) => (
       <Wrapper>
@@ -167,7 +158,6 @@ describe("HostScopedFilePreviewTabContent panel gating", () => {
 
     const view = render(renderTab(false));
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(sdk.files.createPreview).not.toHaveBeenCalled();
 
     view.rerender(renderTab(true));
     await waitFor(() => {

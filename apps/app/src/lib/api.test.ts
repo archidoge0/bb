@@ -14,7 +14,8 @@ function partialResponse(
   contentType: string,
   sizeBytes: number,
 ): Response {
-  const bytes = typeof body === "string" ? new TextEncoder().encode(body) : body;
+  const bytes =
+    typeof body === "string" ? new TextEncoder().encode(body) : body;
   return new Response(bytes, {
     status: 206,
     headers: {
@@ -73,7 +74,10 @@ describe("loadFilePreview", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(requestedRange(1)).toBeNull();
-    expect(preview).toMatchObject({ kind: "text", content: "line 1\nline 2\n" });
+    expect(preview).toMatchObject({
+      kind: "text",
+      content: "line 1\nline 2\n",
+    });
   });
 
   it("does not download text past the preview limit", async () => {

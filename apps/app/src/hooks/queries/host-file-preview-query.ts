@@ -1,7 +1,6 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { loadFilePreview } from "@/lib/api";
-import { splitHostFilePath } from "@/lib/file-lease";
-import { fetchFileLeaseUrl } from "./file-lease-queries";
+import { buildHostFileContentUrl } from "@/lib/file-content-urls";
 import type { FilePreview } from "@bb/client-core";
 import type { QueryOptions } from "./query-helpers";
 import { hostFilePreviewQueryKey } from "./query-keys";
@@ -58,21 +57,14 @@ export function useHostFilePreview(
     (options?.enabled ?? true) && hostId !== null && path !== null;
   const activeHostId = enabled ? hostId : null;
   const activePath = enabled ? path : null;
-  const queryClient = useQueryClient();
   return useQuery<FilePreview>({
     queryKey: hostFilePreviewQueryKey(activeHostId, activePath),
     queryFn: async ({ signal }) => {
       if (activeHostId === null || activePath === null) {
         throw new Error("Host file preview target is incomplete");
       }
-      const { relativePath, rootPath } = splitHostFilePath(activePath);
-      const name = relativePath.split("/").at(-1) ?? relativePath;
-      const url = await fetchFileLeaseUrl(
-        queryClient,
-        { hostId: activeHostId, rootPath },
-        relativePath,
-      );
-      signal.throwIfAborted();
+      const name = activePath.split(/[\\/]/u).at(-1) ?? activePath;
+      const url = buildHostFileContentUrl(activeHostId, activePath);
       const mediaPreviewType = getHostMediaPreviewType(name);
       if (mediaPreviewType !== null) {
         return { ...mediaPreviewType, name, path: activePath, url };

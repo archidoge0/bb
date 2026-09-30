@@ -647,14 +647,8 @@ describe("@bb/sdk", () => {
           truncated: false,
         },
       }),
-      jsonResponse({
-        body: { baseUrl: "/api/v1/file-previews/lease_env", expiresAtMs: 1 },
-      }),
       new Response("remote text", {
         headers: { "content-type": "text/plain" },
-      }),
-      jsonResponse({
-        body: { baseUrl: "/api/v1/file-previews/lease_host", expiresAtMs: 1 },
       }),
       new Response(new Uint8Array([0, 1, 254, 255]), {
         headers: { "content-type": "application/octet-stream" },
@@ -711,21 +705,9 @@ describe("@bb/sdk", () => {
 
     expect(requests.map((request) => request.url)).toEqual([
       "http://bb.test/api/v1/projects/proj_remote/files?hostId=host_remote",
-      "http://bb.test/api/v1/files/previews",
-      "http://bb.test/api/v1/file-previews/lease_env/remote.txt",
-      "http://bb.test/api/v1/files/previews",
-      "http://bb.test/api/v1/file-previews/lease_host/image.bin",
+      "http://bb.test/api/v1/environments/env_remote/files/remote.txt",
+      "http://bb.test/api/v1/projects/proj_remote/hosts/host_remote/files/image.bin",
     ]);
-    expect(JSON.parse(requests[1]?.bodyText ?? "")).toEqual({
-      source: {
-        kind: "project",
-        projectId: "proj_remote",
-        environmentId: "env_remote",
-      },
-    });
-    expect(JSON.parse(requests[3]?.bodyText ?? "")).toEqual({
-      source: { kind: "project", projectId: "proj_remote", hostId: "host_remote" },
-    });
   });
 
   it("routes provider list and model discovery through portable host selectors", async () => {

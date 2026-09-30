@@ -52,7 +52,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
   return {
     ...actual,
-    loadFilePreview: vi.fn(),
+    getThreadHostFilePreview: vi.fn(),
   };
 });
 
@@ -67,7 +67,6 @@ vi.mock("@/lib/sdk", () => ({
       storageLocation: vi.fn(),
       timeline: vi.fn(),
     },
-    files: { createPreview: vi.fn() },
   },
 }));
 
@@ -155,14 +154,10 @@ beforeEach(() => {
       },
     }),
   );
-  vi.mocked(sdk.files.createPreview).mockResolvedValue({
-    baseUrl: "/api/v1/file-previews/lease-host",
-    expiresAtMs: Date.now() + 60_000,
-  });
-  vi.mocked(api.loadFilePreview).mockResolvedValue({
+  vi.mocked(api.getThreadHostFilePreview).mockResolvedValue({
     kind: "text",
     path: "/tmp/log.txt",
-    url: "/api/v1/file-previews/lease-host/tmp/log.txt",
+    url: "/api/v1/threads/thread-1/host-files/tmp/log.txt",
     mimeType: "text/plain",
     content: "preview",
   });
@@ -566,15 +561,7 @@ describe("useThreadHostFilePreview", () => {
     );
 
     await waitFor(() => {
-      expect(api.loadFilePreview).toHaveBeenCalledTimes(1);
-    });
-    expect(sdk.files.createPreview).toHaveBeenCalledWith(
-      expect.objectContaining({
-        source: { kind: "thread-host", threadId: "thread-1" },
-      }),
-    );
-    expect(vi.mocked(api.loadFilePreview).mock.calls[0]?.[0]).toMatchObject({
-      url: "/api/v1/file-previews/lease-host/tmp/log.txt",
+      expect(api.getThreadHostFilePreview).toHaveBeenCalledTimes(1);
     });
 
     const query = queryClient.getQueryCache().find({
@@ -875,7 +862,8 @@ describe("palette lifecycle queries", () => {
     const archived = makeThreadListEntry({ id: "archived", archivedAt: 1 });
     vi.mocked(sdk.threads.list).mockResolvedValue([archived]);
     const { result, rerender } = renderHook(
-      ({ recent, selected }) => usePaletteRecentArchivedThreads({ enabled: recent && selected }),
+      ({ recent, selected }) =>
+        usePaletteRecentArchivedThreads({ enabled: recent && selected }),
       { wrapper, initialProps: { recent: true, selected: false } },
     );
     expect(sdk.threads.list).not.toHaveBeenCalled();
@@ -884,8 +872,9 @@ describe("palette lifecycle queries", () => {
     rerender({ recent: true, selected: true });
     await waitFor(() => expect(result.current.data).toEqual([archived]));
     expect(sdk.threads.list).toHaveBeenCalledExactlyOnceWith({
-      archived: true, limit: 20, signal: expect.any(AbortSignal),
+      archived: true,
+      limit: 20,
+      signal: expect.any(AbortSignal),
     });
   });
-
 });

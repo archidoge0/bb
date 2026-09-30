@@ -41,40 +41,48 @@ unarchived descendants remain. The summary is a preview; concurrent changes
 can alter the eventual archive result. CLI and SDK archive calls remain
 non-interactive.
 
-## File Preview Leases
+## File Content Routes
 
-Clients read file bytes through two routes:
+Clients read file bytes through path-shaped GET routes, so relative URLs in
+HTML and markdown resolve against the same route:
 
-- `POST /api/v1/files/previews` mints a lease and returns `{ baseUrl, expiresAtMs }`.
-  The body is either `{ hostId?, rootPath }` for an absolute host root, or
-  `{ source }`, which the server resolves to a host and root:
-  `thread-storage` (the thread's storage folder), `thread-host` (the thread
-  environment's host filesystem root, `/`), `environment` (the environment
-  workspace, with an optional git `ref`), or `project` (the project source,
-  selected by `environmentId` or `hostId` like the project workspace routes).
-  Minting the same resolved root again returns the same `baseUrl` and extends its
-  expiry, so URLs stay stable while a client refreshes its lease.
-- `GET /api/v1/file-previews/:lease/:relativePath` streams the file. Media
-  elements, HTML iframes, markdown images, and Download links use this URL
-  directly; its lease ID is unguessable.
+- `/api/v1/threads/:id/thread-storage/files/:path` reads the thread's storage
+  folder.
+- `/api/v1/threads/:id/host-files/:absolutePath` and
+  `/api/v1/hosts/:id/files/:absolutePath` read the thread environment's host or
+  the named host from its filesystem root. The path omits the leading `/`; a
+  first segment such as `C:` selects that Windows drive root.
+- `/api/v1/environments/:id/files/:path` reads the environment workspace, and
+  `/api/v1/environments/:id/revisions/:ref/files/:path` reads `HEAD` or a
+  4-40 character hex commit from it.
+- `/api/v1/projects/:id/files/:path` and
+  `/api/v1/projects/:id/hosts/:hostId/files/:path` read the project's local-path
+  source on the primary or named host.
 
-Leases live in server memory, expire after `ttlMs` (the app uses one hour and
-refreshes at half-life), and do not survive a server restart.
+Media elements, HTML iframes, markdown images, and Download links use these
+URLs directly. The server resolves the root on every request, so they need no
+setup and do not expire.
 
-Lease reads support a single HTTP byte range for media playback, seeking, and
+Plugins that preview an arbitrary host directory instead mint a lease:
+`POST /api/v1/files/previews` with `{ hostId?, rootPath, ttlMs? }` returns
+`{ baseUrl, expiresAtMs }`, and `GET /api/v1/file-previews/:lease/:path` reads
+that root. Minting the same root again returns the same `baseUrl` and extends
+its expiry. Leases live in server memory and do not survive a server restart.
+
+File content reads support a single HTTP byte range for media playback, seeking, and
 file preview sampling. Responses advertise `Accept-Ranges: bytes`; bounded,
 open-ended, and suffix ranges return `206` with `Content-Range` and the selected
 bytes. Unsatisfiable ranges return `416` with `Content-Range: bytes */<size>`.
 Malformed ranges, unsupported units, and multipart ranges fall back to the full
-`200` response. HEAD ignores Range. Leases with a git `ref` read the revision with
-one whole-file daemon read, so those responses ignore Range, keep the daemon's
+`200` response. HEAD ignores Range. Revision routes read the file with one
+whole-file daemon read, so those responses ignore Range, keep the daemon's
 25 MB non-image limit, and revalidate with a strong SHA-256 ETag.
 
 File previews request the first 64 KiB. A complete sample becomes the preview
 directly. Otherwise the sample, its MIME type, and the `Content-Range` size
-classify the file: images and videos render from the lease URL, binaries show
+classify the file: images and videos render from the file URL, binaries show
 their size and a Download link, and text is fetched in full only when it is at
-most 25 MB. The Download link is the lease URL with the anchor `download`
+most 25 MB. The Download link is the file URL with the anchor `download`
 attribute, so the browser streams it to disk without the 25 MB limit.
 
 `If-None-Match` revalidation takes precedence over Range. Streamed responses use
@@ -90,7 +98,7 @@ then reads at most 1 MiB per RPC as the HTTP consumer pulls data. HEAD, `304`,
 and `416` responses read no contents. Cancelling or aborting stops subsequent
 reads; an already in-flight RPC can finish. Each RPC opens and closes its file
 handle, so no remote read session needs cleanup. Offsets and lengths are
-validated at the daemon boundary, and paths remain confined to the lease root.
+validated at the daemon boundary, and paths remain confined to the route's root.
 
 The daemon returns a revision based on device, inode, size, and nanosecond
 mtime/ctime. Every content read checks the expected revision before and after
@@ -101,13 +109,13 @@ ordinary writes, truncation, and replacement; it is not an immutable filesystem
 snapshot or a cryptographic guarantee against changes hidden by filesystem
 metadata granularity.
 
-Streamed lease reads bypass the whole-file size caps (including the 25 MiB
+Streamed reads bypass the whole-file size caps (including the 25 MiB
 non-image cap); each chunk stays bounded regardless of file size. `host.read_file`
-consumers such as `POST /files/read` and git-revision leases keep their
+consumers such as `POST /files/read` and revision routes keep their
 whole-file limits and SHA-256 validators. `sdk.projects.fileContent` (and
-`bb project content`) reads through a project lease and decides utf8 versus
+`bb project content`) reads through the project file routes and decides utf8 versus
 base64 from the returned bytes. Host-daemon protocol 219 introduced the chunk
-RPC; older enrolled daemons cannot serve streamed leases until updated.
+RPC; older enrolled daemons cannot serve streamed reads until updated.
 
 ## Stale Workspace Claims
 

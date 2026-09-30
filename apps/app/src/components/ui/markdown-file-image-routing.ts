@@ -5,23 +5,22 @@ import {
   normalizeAbsoluteFilePath,
 } from "@/lib/absolute-file-path";
 import {
-  buildFilePreviewLeaseContentUrl,
-  getFilePreviewLeaseBaseUrl,
+  buildHostFileContentUrl,
+  buildThreadHostFileContentUrl,
 } from "@/lib/file-content-urls";
-import { splitHostFilePath } from "@/lib/file-lease";
 
 const ROUTE_ROOT = "/__bb_markdown_file_root__";
 
 export function buildMarkdownFileImageRouting({
   path,
   rootPath,
-  hostFileBaseUrl,
+  threadId,
   linkRouting,
   resolveRelativeSrc,
 }: {
   path: string;
   rootPath: string | null;
-  hostFileBaseUrl: string | null;
+  threadId: string | null;
   linkRouting?: MarkdownLinkRouting;
   resolveRelativeSrc: (
     rootRelativePath: string,
@@ -39,7 +38,7 @@ export function buildMarkdownFileImageRouting({
     ...linkRouting,
     localImage: {
       absolutePaths:
-        hostFileBaseUrl === null
+        threadId === null
           ? { kind: "contained", rootPath: root }
           : { kind: "trusted-host" },
       relativePaths: {
@@ -47,11 +46,8 @@ export function buildMarkdownFileImageRouting({
         rootPath: root,
       },
       resolveSrc: (image, sourceKind) => {
-        if (sourceKind === "absolute" && hostFileBaseUrl !== null) {
-          return buildFilePreviewLeaseContentUrl(
-            hostFileBaseUrl,
-            splitHostFilePath(image.path).relativePath,
-          );
+        if (sourceKind === "absolute" && threadId !== null) {
+          return buildThreadHostFileContentUrl(threadId, image.path);
         }
         return resolveRelativeSrc(
           image.path.slice(root === "/" ? 1 : root.length + 1),
@@ -62,25 +58,21 @@ export function buildMarkdownFileImageRouting({
   };
 }
 
-export function buildMarkdownLeaseImageRouting({
+export function buildMarkdownHostFileImageRouting({
   path,
   rootPath,
-  previewUrl,
+  hostId,
 }: {
   path: string;
   rootPath: string;
-  previewUrl: string | undefined;
+  hostId: string | null;
 }): MarkdownLinkRouting | undefined {
-  const baseUrl = getFilePreviewLeaseBaseUrl(previewUrl ?? "");
-  if (baseUrl === null) return undefined;
+  if (hostId === null) return undefined;
   return buildMarkdownFileImageRouting({
     path,
     rootPath,
-    hostFileBaseUrl: null,
+    threadId: null,
     resolveRelativeSrc: (_relativePath, absolutePath) =>
-      buildFilePreviewLeaseContentUrl(
-        baseUrl,
-        splitHostFilePath(absolutePath).relativePath,
-      ),
+      buildHostFileContentUrl(hostId, absolutePath),
   });
 }

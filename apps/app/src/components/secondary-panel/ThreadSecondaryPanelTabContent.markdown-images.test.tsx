@@ -60,18 +60,11 @@ vi.mock("@/hooks/queries/thread-queries", () => ({
     previewQuery(path),
 }));
 
-vi.mock("@/hooks/queries/file-lease-queries", () => ({
-  useFileLeaseBaseUrl: (target: { source?: { kind: string } } | null) =>
-    target?.source ? `/api/v1/file-previews/lease_${target.source.kind}` : null,
-  useThreadHostFileBaseUrl: (threadId: string | null | undefined) =>
-    threadId ? "/api/v1/file-previews/lease_thread-host" : null,
-}));
-
 vi.mock("@/hooks/queries/host-file-preview-query", () => ({
   useHostFilePreview: (_hostId: string, path: string) =>
     previewQuery(
       path,
-      "/api/v1/file-previews/lease_preview/workspace/docs/readme.md",
+      "/api/v1/hosts/host_preview/files/workspace/docs/readme.md",
     ),
 }));
 
@@ -96,10 +89,10 @@ describe("secondary-panel Markdown image routing", () => {
     );
 
     expect(imageSrc("absolute")).toBe(
-      "/api/v1/file-previews/lease_thread-host/workspace/generated.png",
+      "/api/v1/threads/thr_preview/host-files/workspace/generated.png",
     );
     expect(imageSrc("relative")).toBe(
-      "/api/v1/file-previews/lease_environment/docs/images/chart.png",
+      "/api/v1/environments/env_preview/files/docs/images/chart.png",
     );
     expect(imageSrc("escape")).toBe("../../outside.png");
   });
@@ -118,15 +111,15 @@ describe("secondary-panel Markdown image routing", () => {
     );
 
     expect(imageSrc("absolute")).toBe(
-      "/api/v1/file-previews/lease_project/generated.png",
+      "/api/v1/projects/proj_preview/hosts/host_preview/files/generated.png",
     );
     expect(imageSrc("relative")).toBe(
-      "/api/v1/file-previews/lease_project/docs/images/chart.png",
+      "/api/v1/projects/proj_preview/hosts/host_preview/files/docs/images/chart.png",
     );
     expect(imageSrc("escape")).toBe("../../outside.png");
   });
 
-  it("routes thread host-file images through the thread host lease", () => {
+  it("routes thread host-file images through the host content endpoint", () => {
     render(
       <HostFilePreviewTabContent
         activePath="/workspace/docs/readme.md"
@@ -139,15 +132,15 @@ describe("secondary-panel Markdown image routing", () => {
     );
 
     expect(imageSrc("absolute")).toBe(
-      "/api/v1/file-previews/lease_thread-host/workspace/generated.png",
+      "/api/v1/threads/thr_preview/host-files/workspace/generated.png",
     );
     expect(imageSrc("relative")).toBe(
-      "/api/v1/file-previews/lease_thread-host/workspace/docs/images/chart.png",
+      "/api/v1/threads/thr_preview/host-files/workspace/docs/images/chart.png",
     );
     expect(imageSrc("escape")).toBe("../../outside.png");
   });
 
-  it("confines host-scoped relative images to the file's folder", () => {
+  it("confines host-scoped relative images to the previewed folder", () => {
     render(
       <HostScopedFilePreviewTabContent
         activePath="/workspace/docs/readme.md"
@@ -159,7 +152,7 @@ describe("secondary-panel Markdown image routing", () => {
 
     expect(imageSrc("absolute")).toBe("/workspace/generated.png");
     expect(imageSrc("relative")).toBe(
-      "/api/v1/file-previews/lease_preview/workspace/docs/images/chart.png",
+      "/api/v1/hosts/host_preview/files/workspace/docs/images/chart.png",
     );
     expect(imageSrc("escape")).toBe("../../outside.png");
   });
@@ -175,10 +168,10 @@ describe("secondary-panel Markdown image routing", () => {
     );
 
     expect(imageSrc("absolute")).toBe(
-      "/api/v1/file-previews/lease_thread-host/workspace/generated.png",
+      "/api/v1/threads/thr_preview/host-files/workspace/generated.png",
     );
     expect(imageSrc("relative")).toBe(
-      "/api/v1/file-previews/lease_thread-storage/docs/images/chart.png",
+      "/api/v1/threads/thr_preview/thread-storage/files/docs/images/chart.png",
     );
     expect(imageSrc("escape")).toBe("../../outside.png");
   });

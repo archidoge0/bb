@@ -82,7 +82,9 @@ import {
 import type {
   PathId,
   PathProjectId,
-  PathPreviewAndFilePath,
+  PathIdAndFilePath,
+  PathIdHostAndFilePath,
+  PathIdRefAndFilePath,
   PathThreadAndQueuedMessage,
   PathTerminal,
 } from "./common.js";
@@ -534,6 +536,18 @@ export const publicApiRoutes = {
       ),
       response: jsonResponse<WorkspaceFileListResponse>(),
     }),
+    file: defineRoute({
+      path: "/projects/:id/files/:filePath{.+}",
+      method: "get",
+      request: noRequest<PathIdAndFilePath>(),
+      response: binaryResponse<Uint8Array>(),
+    }),
+    hostFile: defineRoute({
+      path: "/projects/:id/hosts/:hostId/files/:filePath{.+}",
+      method: "get",
+      request: noRequest<PathIdHostAndFilePath>(),
+      response: binaryResponse<Uint8Array>(),
+    }),
     paths: defineRoute({
       path: "/projects/:id/paths",
       method: "get",
@@ -701,7 +715,7 @@ export const publicApiRoutes = {
     content: defineRoute({
       path: "/file-previews/:id/:filePath{.+}",
       method: "get",
-      request: noRequest<PathPreviewAndFilePath>(),
+      request: noRequest<PathIdAndFilePath>(),
       response: binaryResponse<Uint8Array>(),
     }),
   },
@@ -904,6 +918,12 @@ export const publicApiRoutes = {
         hostDirectoryQuerySchema,
       ),
       response: jsonResponse<HostDirectoryListing>(),
+    }),
+    file: defineRoute({
+      path: "/hosts/:id/files/:filePath{.+}",
+      method: "get",
+      request: noRequest<PathIdAndFilePath>(),
+      response: binaryResponse<Uint8Array>(),
     }),
     cloneDefaultPath: defineRoute({
       path: "/hosts/:id/clone-default-path",
@@ -1163,6 +1183,18 @@ export const publicApiRoutes = {
         environmentPathsQuerySchema,
       ),
       response: jsonResponse<WorkspacePathListResponse>(),
+    }),
+    file: defineRoute({
+      path: "/environments/:id/files/:filePath{.+}",
+      method: "get",
+      request: noRequest<PathIdAndFilePath>(),
+      response: binaryResponse<Uint8Array>(),
+    }),
+    revisionFile: defineRoute({
+      path: "/environments/:id/revisions/:ref/files/:filePath{.+}",
+      method: "get",
+      request: noRequest<PathIdRefAndFilePath>(),
+      response: binaryResponse<Uint8Array>(),
     }),
     actions: defineRoute({
       path: "/environments/:id/actions",
@@ -1660,6 +1692,18 @@ export const publicApiRoutes = {
       method: "get",
       request: noRequest<PathId>(),
       response: jsonResponse<ThreadStorageLocationResponse>(),
+    }),
+    storageFile: defineRoute({
+      path: "/threads/:id/thread-storage/files/:filePath{.+}",
+      method: "get",
+      request: noRequest<PathIdAndFilePath>(),
+      response: binaryResponse<Uint8Array>(),
+    }),
+    hostFile: defineRoute({
+      path: "/threads/:id/host-files/:filePath{.+}",
+      method: "get",
+      request: noRequest<PathIdAndFilePath>(),
+      response: binaryResponse<Uint8Array>(),
     }),
     storagePaths: defineRoute({
       path: "/threads/:id/thread-storage/paths",

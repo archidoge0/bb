@@ -5,7 +5,6 @@ import {
   FILE_LIST_LIMIT_MAX,
 } from "@bb/domain";
 import type { HostDaemonOnlineRpcResultByType } from "@bb/host-daemon-contract";
-import { rejectMultipleWorkspaceSelectors } from "./shared.js";
 
 export const hostFileReadRequestSchema = z
   .object({
@@ -91,60 +90,13 @@ export const hostRemovePathRequestSchema = z
   .strict();
 export type HostRemovePathRequest = z.infer<typeof hostRemovePathRequestSchema>;
 
-const filePreviewTtlMsSchema = z
-  .number()
-  .int()
-  .min(60_000)
-  .max(3_600_000)
-  .optional();
-
-export const filePreviewSourceSchema = z.discriminatedUnion("kind", [
-  z
-    .object({
-      kind: z.literal("thread-storage"),
-      threadId: z.string().min(1),
-    })
-    .strict(),
-  z
-    .object({
-      kind: z.literal("thread-host"),
-      threadId: z.string().min(1),
-    })
-    .strict(),
-  z
-    .object({
-      kind: z.literal("environment"),
-      environmentId: z.string().min(1),
-      ref: z.string().min(1).optional(),
-    })
-    .strict(),
-  z
-    .object({
-      kind: z.literal("project"),
-      projectId: z.string().min(1),
-      environmentId: z.string().min(1).optional(),
-      hostId: z.string().min(1).optional(),
-    })
-    .strict()
-    .superRefine(rejectMultipleWorkspaceSelectors),
-]);
-export type FilePreviewSource = z.infer<typeof filePreviewSourceSchema>;
-
-export const createFilePreviewRequestSchema = z.union([
-  z
-    .object({
-      hostId: z.string().min(1).optional(),
-      rootPath: z.string().min(1),
-      ttlMs: filePreviewTtlMsSchema,
-    })
-    .strict(),
-  z
-    .object({
-      source: filePreviewSourceSchema,
-      ttlMs: filePreviewTtlMsSchema,
-    })
-    .strict(),
-]);
+export const createFilePreviewRequestSchema = z
+  .object({
+    hostId: z.string().min(1).optional(),
+    rootPath: z.string().min(1),
+    ttlMs: z.number().int().min(60_000).max(3_600_000).optional(),
+  })
+  .strict();
 export type CreateFilePreviewRequest = z.infer<
   typeof createFilePreviewRequestSchema
 >;

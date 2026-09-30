@@ -1,8 +1,5 @@
 // @vitest-environment jsdom
 
-import { createFileLeaseTestHarness } from "@/test/threadHostFileLeaseTestHarness";
-import { fileLeaseQueryKey } from "@/hooks/queries/query-keys";
-import { threadHostFileLeaseTarget } from "@/lib/file-lease";
 import {
   act,
   cleanup,
@@ -22,17 +19,6 @@ import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import { makeThreadListEntry as makeThreadListEntryFixture } from "@bb/test-helpers/domain-fixtures";
 import { GENERATED_MESSAGE_COLLAPSED_PREVIEW_CHAR_CAP } from "@bb/client-core";
 import { generatedConversationCollapsedPreview } from "./GeneratedConversationMessage";
-
-function threadHostLeaseWrapper(threadId: string) {
-  const { queryClient, wrapper } = createFileLeaseTestHarness({
-    timelineThreadId: threadId,
-  });
-  queryClient.setQueryData(
-    fileLeaseQueryKey(threadHostFileLeaseTarget(threadId)),
-    "/api/v1/file-previews/lease_host",
-  );
-  return wrapper;
-}
 
 function resolveThreadLink(link: TimelineTitleLink): string | null {
   return link.kind === "thread"
@@ -93,9 +79,6 @@ function renderChildCompleted(text = MARKDOWN_BODY) {
         />
       </RouteNavigationProvider>
     </MemoryRouter>,
-    {
-      wrapper: threadHostLeaseWrapper("thr_parent"),
-    },
   );
 }
 
@@ -111,7 +94,9 @@ describe("GeneratedConversationMessage images", () => {
 
     expect(
       screen.getByRole("img", { name: "report" }).getAttribute("src"),
-    ).toBe("/api/v1/file-previews/lease_host/workspace/reports/result.png");
+    ).toBe(
+      "/api/v1/threads/thr_parent/host-files/workspace/reports/result.png",
+    );
   });
 });
 

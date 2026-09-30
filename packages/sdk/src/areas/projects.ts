@@ -488,19 +488,17 @@ export function createProjectsArea(args: CreateSdkAreaArgs): ProjectsArea {
       );
     },
     async fileContent(input) {
-      const { projectId, path, signal, ...routing } = input;
-      const lease = await transport.readJson(
-        transport.api.v1.files.previews.$post(
-          { json: { source: { kind: "project", projectId, ...routing } } },
-          ...signalRequestArgs(signal),
-        ),
-      );
+      const { projectId, path, signal, environmentId, hostId } = input;
+      const filePath = path.split("/").map(encodeURIComponent).join("/");
+      const routePath =
+        environmentId !== undefined
+          ? `/environments/${encodeURIComponent(environmentId)}/files/${filePath}`
+          : hostId !== undefined
+            ? `/projects/${encodeURIComponent(projectId)}/hosts/${encodeURIComponent(hostId)}/files/${filePath}`
+            : `/projects/${encodeURIComponent(projectId)}/files/${filePath}`;
       const response = await transport.resolve(
         transport.fetch(
-          `${transport.baseUrl.replace(/\/+$/u, "")}${lease.baseUrl}/${path
-            .split("/")
-            .map(encodeURIComponent)
-            .join("/")}`,
+          `${transport.baseUrl.replace(/\/+$/u, "")}/api/v1${routePath}`,
           signal === undefined ? undefined : { signal },
         ),
       );

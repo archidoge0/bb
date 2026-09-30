@@ -25,9 +25,7 @@ import {
   type TimelineWorkRowFullOutput,
   type TimelineWorkRowFullOutputState,
 } from "./useTimelineWorkRowFullOutput.js";
-import { buildFilePreviewLeaseContentUrl } from "@/lib/file-content-urls";
-import { splitHostFilePath } from "@/lib/file-lease";
-import { useTimelineHostFileBaseUrl } from "./ThreadHostFileLeaseContext";
+import { buildThreadHostFileContentUrl } from "@/lib/file-content-urls";
 import type { ThreadTimelineImageViewSrcResolver } from "./types.js";
 
 interface WorkRowBodyProps {
@@ -65,39 +63,26 @@ interface OutputPreviewNoteArgs {
 }
 
 interface ResolveImageViewSourceArgs {
-  hostFileBaseUrl: string | null;
   resolveImageViewSrc: ThreadTimelineImageViewSrcResolver | undefined;
   row: ImageWorkRow;
 }
 
 function resolveImageViewSource({
-  hostFileBaseUrl,
   resolveImageViewSrc,
   row,
 }: ResolveImageViewSourceArgs): string | null {
   if (!row.path || (row.workKind === "image-generation" && row.error)) {
     return null;
   }
-  if (resolveImageViewSrc) {
-    return resolveImageViewSrc({ path: row.path, threadId: row.threadId });
-  }
-  return hostFileBaseUrl === null
-    ? null
-    : buildFilePreviewLeaseContentUrl(
-        hostFileBaseUrl,
-        splitHostFilePath(row.path).relativePath,
-      );
+  return resolveImageViewSrc
+    ? resolveImageViewSrc({ path: row.path, threadId: row.threadId })
+    : buildThreadHostFileContentUrl(row.threadId, row.path);
 }
 
 function ImageWorkRowBody({ resolveImageViewSrc, row }: ImageWorkRowBodyProps) {
   const [loadError, setLoadError] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
-  const hostFileBaseUrl = useTimelineHostFileBaseUrl(row.threadId);
-  const imageSrc = resolveImageViewSource({
-    hostFileBaseUrl,
-    resolveImageViewSrc,
-    row,
-  });
+  const imageSrc = resolveImageViewSource({ resolveImageViewSrc, row });
   const imageName = row.path ? fileNameFromPath(row.path) : "";
   const imageAlt = `${row.workKind === "image-generation" ? "Generated" : "Viewed"} image: ${imageName}`;
 

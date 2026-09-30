@@ -1,6 +1,6 @@
 import { ProviderIcon } from "@/components/plugin/ProviderIcon";
 import { Icon } from "@bb/shared-ui/icon";
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import type { MarkdownProps, PluginSdkApp } from "@get-bb/plugin-sdk";
 import { PluginDiff } from "@/components/plugin/PluginDiff";
 import { PluginBranchPicker } from "@/components/plugin/PluginBranchPicker";
@@ -17,13 +17,8 @@ import { PluginThreadTitle } from "@/components/plugin/PluginThreadTitle";
 import { PluginUrlLink } from "@/components/plugin/PluginUrlLink";
 import { ExperimentalFileLink } from "@/components/plugin/ExperimentalFileLink";
 import { MarkdownPreview } from "@/components/ui/markdown-preview";
-import {
-  buildMarkdownDocumentLinkRouting,
-  markdownDocumentFileLeaseTarget,
-  parseMarkdownDocument,
-} from "@/components/ui/markdown-document-link-routing";
-import { useFileLeaseBaseUrl } from "@/hooks/queries/file-lease-queries";
-import { useTimelineHostFileBaseUrl } from "@/components/thread/timeline/ThreadHostFileLeaseContext";
+import type { MarkdownLinkRouting } from "@/components/ui/markdown-link-routing";
+import { buildMarkdownDocumentLinkRouting } from "@/components/ui/markdown-document-link-routing";
 import { buildMarkdownMessageLinkRouting } from "@/components/ui/markdown-message-link-routing";
 import type { MarkdownPreviewLinkHandler } from "@/components/ui/markdown-link";
 import { useThreadTimelineNavigation } from "@/components/thread/timeline/ThreadTimelineNavigationContext";
@@ -135,32 +130,28 @@ function PluginMarkdown({
     ({ href }) => navigation.openUrl({ url: href }),
     [navigation],
   );
-  const hostFileBaseUrl = useTimelineHostFileBaseUrl(threadId);
-  const document = parseMarkdownDocument(experimental_document);
-  const documentHostFileBaseUrl = useTimelineHostFileBaseUrl(
-    document?.threadId,
-  );
-  const documentFileBaseUrl = useFileLeaseBaseUrl(
-    document === null ? null : markdownDocumentFileLeaseTarget(document),
-  );
-  const messageRouting = buildMarkdownMessageLinkRouting({
-    hostFileBaseUrl,
+  const linkRouting = useMemo<MarkdownLinkRouting>(() => {
+    const messageRouting = buildMarkdownMessageLinkRouting({
+      onOpenLink,
+      onOpenLocalFileLink,
+      threadId,
+      workspaceRootPath,
+    }) ?? { onOpenLink };
+    return experimental_document === undefined
+      ? messageRouting
+      : buildMarkdownDocumentLinkRouting({
+          document: experimental_document,
+          messageRouting,
+          openFilePreview: navigation.openFilePreview,
+        });
+  }, [
+    experimental_document,
+    navigation.openFilePreview,
     onOpenLink,
     onOpenLocalFileLink,
+    threadId,
     workspaceRootPath,
-  }) ?? { onOpenLink };
-  const linkRouting =
-    experimental_document === undefined
-      ? messageRouting
-      : document === null
-        ? {}
-        : buildMarkdownDocumentLinkRouting({
-            document,
-            documentFileBaseUrl,
-            hostFileBaseUrl: documentHostFileBaseUrl,
-            messageRouting,
-            openFilePreview: navigation.openFilePreview,
-          });
+  ]);
 
   return (
     <MarkdownPreview

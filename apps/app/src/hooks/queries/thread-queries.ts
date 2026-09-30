@@ -9,10 +9,7 @@ import {
 import { useCallback, useMemo } from "react";
 import { COMPACT_VIEWPORT_QUERY } from "@bb/shared-ui/hooks/use-compact-viewport";
 import { getMediaQuerySnapshot } from "@bb/shared-ui/hooks/use-media-query";
-import type {
-  PendingInteraction,
-  ThreadListEntry,
-} from "@bb/domain";
+import type { PendingInteraction, ThreadListEntry } from "@bb/domain";
 import type {
   PromptHistoryResponse,
   ThreadQueuedMessageListResponse,
@@ -35,12 +32,6 @@ import type { FilePreview } from "@bb/client-core";
 import type { PathListOptions } from "@/lib/path-list-options";
 import type { ThreadStorageFileListOptions } from "@/lib/thread-storage-files";
 import * as api from "@/lib/api";
-import {
-  splitHostFilePath,
-  threadHostFileLeaseTarget,
-  threadStorageFileLeaseTarget,
-} from "@/lib/file-lease";
-import { fetchFileLeaseUrl } from "./file-lease-queries";
 import { sdk } from "@/lib/sdk";
 import {
   useThreadDetailRealtimeSubscription,
@@ -888,25 +879,15 @@ export function useThreadStorageFilePreview(
 ) {
   const enabled = (options?.enabled ?? true) && Boolean(id) && Boolean(path);
   useThreadDetailRealtimeSubscription(id, { enabled });
-  const queryClient = useQueryClient();
 
   return useQuery<FilePreview>({
     queryKey: threadStorageFilePreviewQueryKey(id, path),
-    queryFn: async ({ signal }) => {
-      const threadId = requireThreadId(id, "useThreadStorageFilePreview");
-      const filePath = path ?? "";
-      return api.loadFilePreview(
-        {
-          path: filePath,
-          url: await fetchFileLeaseUrl(
-            queryClient,
-            threadStorageFileLeaseTarget(threadId),
-            filePath,
-          ),
-        },
+    queryFn: ({ signal }) =>
+      api.getThreadStorageFilePreview(
+        requireThreadId(id, "useThreadStorageFilePreview"),
+        path ?? "",
         signal,
-      );
-    },
+      ),
     enabled,
     ...REALTIME_OWNED_MOUNT_BASELINE_QUERY_POLICY,
     ...HEAVY_PAYLOAD_QUERY_POLICY,
@@ -925,26 +906,15 @@ export function useThreadHostFilePreview(
     Boolean(environmentId) &&
     Boolean(path);
   useThreadDetailRealtimeSubscription(id, { enabled });
-  const queryClient = useQueryClient();
 
   return useQuery<FilePreview>({
     queryKey: threadHostFilePreviewQueryKey(id, environmentId, path),
-    queryFn: async ({ signal }) => {
-      const threadId = requireThreadId(id, "useThreadHostFilePreview");
-      const filePath = path ?? "";
-      return api.loadFilePreview(
-        {
-          name: filePath.split("/").at(-1),
-          path: filePath,
-          url: await fetchFileLeaseUrl(
-            queryClient,
-            threadHostFileLeaseTarget(threadId),
-            splitHostFilePath(filePath).relativePath,
-          ),
-        },
+    queryFn: ({ signal }) =>
+      api.getThreadHostFilePreview(
+        requireThreadId(id, "useThreadHostFilePreview"),
+        path ?? "",
         signal,
-      );
-    },
+      ),
     enabled,
     ...RESUME_REFETCH_QUERY_POLICY,
     ...HEAVY_PAYLOAD_QUERY_POLICY,

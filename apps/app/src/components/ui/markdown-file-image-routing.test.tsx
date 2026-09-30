@@ -5,22 +5,27 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { FilePreview } from "@/components/secondary-panel/FilePreview";
 import {
   buildMarkdownFileImageRouting,
-  buildMarkdownLeaseImageRouting,
+  buildMarkdownHostFileImageRouting,
 } from "./markdown-file-image-routing";
 import type { MarkdownLinkRouting } from "./markdown-link-routing";
-import { buildFilePreviewLeaseContentUrl } from "@/lib/file-content-urls";
-
-const HOST_LEASE = "/api/v1/file-previews/lease_host";
-const SOURCE_LEASE = "/api/v1/file-previews/lease_source";
+import {
+  buildThreadHostFileContentUrl,
+  buildThreadStorageRawContentUrl,
+} from "@/lib/file-content-urls";
 
 afterEach(cleanup);
 
 function renderMarkdownFilePreview({
   content,
+  imageContent,
   path,
   rootPath,
 }: {
   content: string;
+  imageContent: {
+    kind: "thread-storage" | "workspace";
+    threadId: string;
+  };
   path: string;
   rootPath: string;
 }) {
@@ -29,9 +34,17 @@ function renderMarkdownFilePreview({
       headerMode="none"
       markdownLinkRouting={buildMarkdownFileImageRouting({
         path,
-        hostFileBaseUrl: HOST_LEASE,
-        resolveRelativeSrc: (relativePath) =>
-          buildFilePreviewLeaseContentUrl(SOURCE_LEASE, relativePath),
+        threadId: imageContent.threadId,
+        resolveRelativeSrc: (relativePath, absolutePath) =>
+          imageContent.kind === "thread-storage"
+            ? buildThreadStorageRawContentUrl(
+                imageContent.threadId,
+                relativePath,
+              )
+            : buildThreadHostFileContentUrl(
+                imageContent.threadId,
+                absolutePath,
+              ),
         rootPath,
       })}
       path={path}
@@ -95,22 +108,21 @@ describe("Markdown file preview image routing", () => {
       buildMarkdownFileImageRouting({
         path: "docs/report.md",
         rootPath: "/workspace",
-        hostFileBaseUrl: HOST_LEASE,
+        threadId: "thr_preview",
         linkRouting,
         resolveRelativeSrc: vi.fn(),
       }),
     ).toBe(linkRouting);
   });
 
-  it("resolves nested skill and host files within their shared preview lease", () => {
+  it("resolves nested skill and host images within the previewed folder", () => {
     render(
       <FilePreview
         headerMode="none"
-        markdownLinkRouting={buildMarkdownLeaseImageRouting({
+        markdownLinkRouting={buildMarkdownHostFileImageRouting({
           path: "references/guide.md",
           rootPath: "/skills/example",
-          previewUrl:
-            "/api/v1/file-previews/lease_skill/skills/example/SKILL.md",
+          hostId: "host_skill",
         })}
         path="references/guide.md"
         state={{
@@ -127,7 +139,7 @@ describe("Markdown file preview image routing", () => {
     );
     for (const name of ["relative", "absolute"]) {
       expect(screen.getByRole("img", { name }).getAttribute("src")).toBe(
-        "/api/v1/file-previews/lease_skill/skills/example/assets/chart.png",
+        "/api/v1/hosts/host_skill/files/skills/example/assets/chart.png",
       );
     }
     expect(
@@ -141,16 +153,21 @@ describe("Markdown file preview image routing", () => {
         "![absolute](/Users/me/.bb/thread-storage/thr_preview/generated.png)",
         "![relative](screenshots/chart.png)",
       ].join("\n\n"),
+      imageContent: { kind: "thread-storage", threadId: "thr_preview" },
       path: "reports/nested/report.md",
       rootPath: "/Users/me/.bb/thread-storage/thr_preview",
     });
 
     expect(
       screen.getByRole("img", { name: "absolute" }).getAttribute("src"),
-    ).toBe(`${HOST_LEASE}/Users/me/.bb/thread-storage/thr_preview/generated.png`);
+    ).toBe(
+      "/api/v1/threads/thr_preview/host-files/Users/me/.bb/thread-storage/thr_preview/generated.png",
+    );
     expect(
       screen.getByRole("img", { name: "relative" }).getAttribute("src"),
-    ).toBe(`${SOURCE_LEASE}/reports/nested/screenshots/chart.png`);
+    ).toBe(
+      "/api/v1/threads/thr_preview/thread-storage/files/reports/nested/screenshots/chart.png",
+    );
   });
 
   it("routes absolute and file-relative images in workspace Markdown previews", () => {
@@ -159,21 +176,27 @@ describe("Markdown file preview image routing", () => {
         "![absolute](/Users/me/project/generated.png)",
         "![relative](../assets/chart.png)",
       ].join("\n\n"),
+      imageContent: { kind: "workspace", threadId: "thr_preview" },
       path: "docs/guides/report.md",
       rootPath: "/Users/me/project",
     });
 
     expect(
       screen.getByRole("img", { name: "absolute" }).getAttribute("src"),
-    ).toBe(`${HOST_LEASE}/Users/me/project/generated.png`);
+    ).toBe(
+      "/api/v1/threads/thr_preview/host-files/Users/me/project/generated.png",
+    );
     expect(
       screen.getByRole("img", { name: "relative" }).getAttribute("src"),
-    ).toBe(`${SOURCE_LEASE}/docs/assets/chart.png`);
+    ).toBe(
+      "/api/v1/threads/thr_preview/host-files/Users/me/project/docs/assets/chart.png",
+    );
   });
 
   it("does not rewrite relative images that escape the workspace root", () => {
     renderMarkdownFilePreview({
       content: "![escape](../../outside.png)",
+      imageContent: { kind: "workspace", threadId: "thr_preview" },
       path: "docs/report.md",
       rootPath: "/Users/me/project",
     });

@@ -94,7 +94,10 @@ describe("host file routes", () => {
       const files = new Map([
         [
           "/notes/chart.png",
-          { bytes: Buffer.from([0x89, 0x50, 0x4e, 0x47]), mimeType: "image/png" },
+          {
+            bytes: Buffer.from([0x89, 0x50, 0x4e, 0x47]),
+            mimeType: "image/png",
+          },
         ],
         [
           "/notes/report.html",

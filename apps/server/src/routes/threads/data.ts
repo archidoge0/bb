@@ -522,7 +522,10 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
   });
 
   get(routes.storageFiles, async (context, query) => {
-    const target = await requireThreadStorageTarget(deps, context.req.param("id"));
+    const target = await requireThreadStorageTarget(
+      deps,
+      context.req.param("id"),
+    );
     const limit = parseFileListLimit(query.limit);
 
     try {
@@ -557,7 +560,10 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
   });
 
   get(routes.storageLocation, async (context) => {
-    const target = await requireThreadStorageTarget(deps, context.req.param("id"));
+    const target = await requireThreadStorageTarget(
+      deps,
+      context.req.param("id"),
+    );
     return context.json({
       hostId: target.hostId,
       storageRootPath: target.storagePath,
@@ -565,7 +571,10 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
   });
 
   get(routes.storagePaths, async (context, query) => {
-    const target = await requireThreadStorageTarget(deps, context.req.param("id"));
+    const target = await requireThreadStorageTarget(
+      deps,
+      context.req.param("id"),
+    );
     const limit = parseFileListLimit(query.limit);
     const inclusion = parsePathKindInclusion({
       includeFiles: query.includeFiles,
@@ -604,5 +613,4 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
       throw error;
     }
   });
-
 }

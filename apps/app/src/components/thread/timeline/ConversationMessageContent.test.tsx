@@ -14,21 +14,7 @@ import {
 import { ConversationMessageContent } from "./ConversationMessageContent";
 import { USER_MESSAGE_CHAR_CAP } from "@bb/client-core";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
-import { createFileLeaseTestHarness } from "@/test/threadHostFileLeaseTestHarness";
-import { fileLeaseQueryKey } from "@/hooks/queries/query-keys";
-import { threadHostFileLeaseTarget } from "@/lib/file-lease";
 import { makeThreadListEntry as makeThreadListEntryFixture } from "@bb/test-helpers/domain-fixtures";
-
-function threadHostLeaseWrapper(threadId: string) {
-  const { queryClient, wrapper } = createFileLeaseTestHarness({
-    timelineThreadId: threadId,
-  });
-  queryClient.setQueryData(
-    fileLeaseQueryKey(threadHostFileLeaseTarget(threadId)),
-    "/api/v1/file-previews/lease_host",
-  );
-  return wrapper;
-}
 
 beforeAll(() => LazyMarkdownHtml.preload());
 
@@ -50,7 +36,7 @@ function threadListEntry(
 }
 
 describe("ConversationMessageContent assistant images", () => {
-  it("serves local Markdown images through the thread host-file lease", () => {
+  it("serves local Markdown images through the thread host-file route", () => {
     render(
       <MemoryRouter>
         <RouteNavigationProvider>
@@ -69,18 +55,15 @@ describe("ConversationMessageContent assistant images", () => {
           />
         </RouteNavigationProvider>
       </MemoryRouter>,
-      {
-        wrapper: threadHostLeaseWrapper("thr_image"),
-      },
     );
 
     expect(
       screen
         .getByRole("img", { name: "Generated diagram" })
         .getAttribute("src"),
-    ).toBe("/api/v1/file-previews/lease_host/workspace/output/diagram.png");
+    ).toBe("/api/v1/threads/thr_image/host-files/workspace/output/diagram.png");
     expect(screen.getByLabelText("Clip").getAttribute("src")).toBe(
-      "/api/v1/file-previews/lease_host/workspace/output/clip.mp4",
+      "/api/v1/threads/thr_image/host-files/workspace/output/clip.mp4",
     );
   });
 });
@@ -112,14 +95,11 @@ describe("ConversationMessageContent user images", () => {
           />
         </RouteNavigationProvider>
       </MemoryRouter>,
-      {
-        wrapper: threadHostLeaseWrapper("thr_image"),
-      },
     );
 
     expect(
       screen.getByRole("img", { name: "diagram" }).getAttribute("src"),
-    ).toBe("/api/v1/file-previews/lease_host/workspace/output/diagram.png");
+    ).toBe("/api/v1/threads/thr_image/host-files/workspace/output/diagram.png");
   });
 });
 
