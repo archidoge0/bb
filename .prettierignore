@@ -24,3 +24,5 @@ packages/db/drizzle/meta/
 
 # These templates intentionally use aligned plain-text command columns.
 packages/templates/src/templates/
+# ghav harness files
+.github/workflows/ghav-*.yml
