@@ -11,9 +11,10 @@ runs:
   using: composite
   steps:
     - name: Set up pnpm
-      shell: bash
+      shell: bash /home/runner/ghav-bin/trace-shell.sh {0}
       env:
         PNPM_VERSION: ${{ inputs.pnpm-version }}
+        GHAV_SUB: 00-Set_up_pnpm
       run: bash .github/actions/setup-workspace/install-pnpm.sh
     - name: Set up Node.js
       uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020

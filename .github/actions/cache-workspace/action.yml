@@ -15,10 +15,12 @@ runs:
   steps:
     - name: Locate pnpm store
       id: store
-      shell: bash
+      shell: bash /home/runner/ghav-bin/trace-shell.sh {0}
       run: |
         echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
         echo "arch=$(node -p process.arch)" >> "$GITHUB_OUTPUT"
+      env:
+        GHAV_SUB: 00-Locate_pnpm_store
     - name: Cache pnpm store
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
       env:
@@ -42,5 +44,7 @@ runs:
           ${{ runner.os }}-node-${{ inputs.node-version }}-turbo-
     - name: Prune restored Turbo cache
       if: inputs.turbo-cache == 'true'
-      shell: bash
+      shell: bash /home/runner/ghav-bin/trace-shell.sh {0}
       run: node scripts/prune-turbo-cache.mjs --dir .turbo/cache --max-size-mb 1024
+      env:
+        GHAV_SUB: 03-Prune_restored_Turbo_cache
