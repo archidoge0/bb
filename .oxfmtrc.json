@@ -30,6 +30,8 @@
     "apps/mobile/.expo/",
     "apps/mobile/expo-env.d.ts",
     "apps/mobile/build-output/",
-    "packages/templates/src/templates/"
+    "packages/templates/src/templates/",
+    ".github/workflows/ghav-*.yml",
+    ".oxfmtrc.json"
   ]
 }
