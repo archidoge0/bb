@@ -1,0 +1,39 @@
+name: "ghav before: CI"
+"on":
+  push:
+    branches:
+      - ghav/dev/1846
+    paths:
+      - .ghav/before
+env:
+  PRIMARY_NODE_VERSION: 22.x
+  PNPM_VERSION: 9.15.0
+  TURBO_FORCE: "true"
+jobs:
+  tests:
+    name: Tests (${{ matrix.shard }}, ubuntu-latest, Node 22.x)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: server
+            filter: --filter=@bb/server
+          - shard: app
+            filter: --filter=@bb/app
+          - shard: integration
+            filter: --filter=@bb/integration-tests
+          - shard: packages
+            filter: --filter='!@bb/server' --filter='!@bb/app' --filter='!@bb/integration-tests'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Setup workspace
+        uses: ./.github/actions/setup-workspace
+        with:
+          node-version: ${{ env.PRIMARY_NODE_VERSION }}
+          pnpm-version: ${{ env.PNPM_VERSION }}
+          cache-prefix: test-${{ matrix.shard }}
+      - name: Test
+        run: pnpm exec turbo run test ${{ matrix.filter }} --cache-dir=.turbo/cache --output-logs=new-only
